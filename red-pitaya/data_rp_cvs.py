@@ -10,7 +10,7 @@ import sys
 import numpy as np
 # import matplotlib.pyplot as plt
 import wavio
-import pandas as pd
+# import pandas as pd
 
 if len(sys.argv) > 1:
     filename = str(sys.argv[1])
@@ -21,7 +21,9 @@ NUM_CHANNELS = 32
 
 data_raw = wavio.read(filename + '.wav')
 
-ch0 = data_raw.data
+ch0 = np.array(data_raw.data, dtype=np.int16)
 
-df=pd.DataFrame(ch0, dtype=np.int16, columns=['ch0'])
-df.to_csv(filename + '.csv')
+np.savetxt(filename + '.csv', ch0, fmt='%d')
+
+# df=pd.DataFrame(ch0, dtype=np.int16, columns=['ch0'])
+# df.to_csv(filename + '.csv')
