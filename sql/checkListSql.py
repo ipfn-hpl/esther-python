@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PyQt6 SQL App example
+PyQt6 SQL App for signed Esther Checklists
 """
 
 #import os
@@ -37,7 +37,8 @@ from PyQt6.QtWidgets import (
 #db.open()
 
 db = QSqlDatabase("QMARIADB")
-db.setHostName("10.136.240.213");
+db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
+#db.setHostName("10.136.240.213");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
 db.setUserName("archive");
@@ -118,8 +119,9 @@ class MainWindow(QMainWindow):
         self.tableOK.setModel(self.modelOK)
         self.queryOK = QSqlQuery(db=db)
         self.queryOK.prepare(
-            "SELECT LineStatusDate, CheckLine, SignedBy FROM CheckLinesOk "
-           # "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
+            "SELECT LineStatusDate, CheckLine, ChecklistLines.LineDesc, SignedBy, EstherRoles.RoleName FROM CheckLinesOk "
+            "INNER JOIN ChecklistLines ON CheckLinesOk.CheckLine = ChecklistLines.CheckLineId "
+            "INNER JOIN EstherRoles ON CheckLinesOk.SignedBy = EstherRoles.RoleId "
          #   "WHERE ShotNumber = :shot_no "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineStatusDate DESC LIMIT 1"
