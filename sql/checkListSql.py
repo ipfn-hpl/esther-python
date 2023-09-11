@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget,
     QPushButton,
     QCheckBox,
+    QRadioButton,
     QLabel,
 )
 
@@ -85,13 +86,28 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(self.list)
         layoutTools.addWidget(self.ceChck)
         layoutTools.addWidget(self.reChck)
-        #layoutTools.addWidget(self.search)
+
+        radiobutton = QRadioButton('ChiefEngineer', self)
+        radiobutton.setChecked(True)
+        #radiobutton.sign = "0"
+        radiobutton.sign = 0
+        self.signBy = 0
+        radiobutton.toggled.connect(self.update_sign)
+        layoutTools.addWidget(radiobutton)
+
+        radiobutton = QRadioButton('Researcher', self)
+        #radiobutton.sign = "Researcher"
+        radiobutton.sign = 1
+        radiobutton.toggled.connect(self.update_sign)
+        layoutTools.addWidget(radiobutton)
 
         self.table = QTableView()
-        self.tableOK = QTableView()
+        self.tableLastCL = QTableView()
+        self.tableWaitOK = QTableView()
         layoutMain.addLayout(layoutTools)
         layoutMain.addWidget(self.table)
-        layoutMain.addWidget(self.tableOK)
+        layoutMain.addWidget(self.tableLastCL)
+        layoutMain.addWidget(self.tableWaitOK)
         container.setLayout(layoutMain)
         
         #self.table = QTableView()
@@ -115,25 +131,59 @@ class MainWindow(QMainWindow):
 
         #self.model.removeColumns(0,1)
         #self.model.select()
-        self.modelOK = QSqlQueryModel()
-        self.tableOK.setModel(self.modelOK)
-        self.queryOK = QSqlQuery(db=db)
-        self.queryOK.prepare(
-            "SELECT LineStatusDate, CheckLine, ChecklistLines.LineDesc, SignedBy, EstherRoles.RoleName FROM CheckLinesOk "
+        self.modelLastCL = QSqlQueryModel()
+        self.tableLastCL.setModel(self.modelLastCL)
+        self.queryLastCL = QSqlQuery(db=db)
+        self.queryLastCL.prepare(
+            "SELECT ChecklistLines.LineOrder, LineStatusDate, CheckLine, ChecklistLines.LineDesc, EstherRoles.RoleName "
+            "FROM CheckLinesOk "
             "INNER JOIN ChecklistLines ON CheckLinesOk.CheckLine = ChecklistLines.CheckLineId "
-            "INNER JOIN EstherRoles ON CheckLinesOk.SignedBy = EstherRoles.RoleId "
-         #   "WHERE ShotNumber = :shot_no "
+            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+            "WHERE CheckLinesOk.ShotNumber = :shot_no "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineStatusDate DESC LIMIT 1"
+            "ORDER BY LineStatusDate ASC LIMIT 5"
         )
-        self.queryOK.bindValue(":shot_no", 177)
-        self.queryOK.exec()
-        self.modelOK.setQuery(self.queryOK)
-        print(self.queryOK.lastQuery())
+        self.queryLastCL.bindValue(":shot_no", 177)
+        self.queryLastCL.exec()
+        lastOK  = 0
+        while self.queryLastCL.next():
+            lastOK  = self.queryLastCL.value(0)
+        self.modelLastCL.setQuery(self.queryLastCL)
+        print(self.queryLastCL.lastQuery())
+        self.update_query()
+        print("lastOrder: " + str(lastOK))
+
+        self.modelWaitOK = QSqlQueryModel()
+        self.tableWaitOK.setModel(self.modelWaitOK)
+        self.queryWaitOK = QSqlQuery(db=db)
+        self.queryWaitOK.prepare(
+            #"SELECT * FROM ChecklistLines "
+            "SELECT CheckLineId, LineOrder, LineDesc "
+            "FROM ChecklistLines "
+            "WHERE LineOrder > :l_order "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY LineOrder ASC LIMIT 3"
+            #"ORDER BY LineStatusDate DESC LIMIT 5"
+        )
+        self.queryWaitOK.bindValue(":l_order", lastOK)
+        self.queryWaitOK.exec()
+        self.modelWaitOK.setQuery(self.queryWaitOK) 
+        print(self.queryWaitOK.lastQuery())
 
         self.update_query()
         self.setMinimumSize(QSize(1424, 800))
         self.setCentralWidget(container)
+
+    def update_sign(self):
+        # get the radio button the send the signal
+        rb = self.sender()
+
+        # check if the radio button is checked
+
+        if rb.isChecked():
+            print("sign is %s" % (rb.sign))
+            self.signBy = rb.sign
+            #self.result_label.setText(f'You selected {rb.text()}')
 
     def update_ce(self, s):
         if (Qt.CheckState(s) == Qt.CheckState.Checked):
