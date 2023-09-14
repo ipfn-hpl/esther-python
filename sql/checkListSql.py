@@ -77,10 +77,7 @@ class MainWindow(QMainWindow):
         widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
         widget.currentIndexChanged.connect(self.plan_changed)
         self.planId = 0
-        self.reChck = QCheckBox("Researcher")
-        self.reChck.setCheckState(Qt.CheckState.Unchecked)
-        self.reChck.stateChanged.connect(self.update_re)
-
+        
         layoutTools.addWidget(refreshButt)
         layoutTools.addWidget(QLabel('Exp. Phase'))
         layoutTools.addWidget(QLabel('Checklist:'))
@@ -90,6 +87,7 @@ class MainWindow(QMainWindow):
         self.listId = 0
         layoutTools.addWidget(listComb)
 
+        layoutTools.addWidget(QLabel('Shot'))
         shotSpin = QSpinBox()
         shotSpin.setMinimum(170)
         shotSpin.setMaximum(1000) # May need to change (hopefully)
@@ -141,14 +139,13 @@ class MainWindow(QMainWindow):
             "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
             "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
             "WHERE Checklist = :list_id AND DayPlan = :plan_id "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineOrder ASC"
         )
         #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
         #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
 
         #self.table.setModel(self.model)
-        self.query.bindValue(":list_id", 1)
+        self.query.bindValue(":list_id", 0)
         self.query.bindValue(":plan_id", self.planId)
         #self.query.bindValue(":ce_checked", '1')
         #self.query.bindValue(":re_checked", '0')
@@ -195,7 +192,7 @@ class MainWindow(QMainWindow):
         print(self.queryWaitOK.lastQuery())
 
         self.update_query()
-        #shotSpin.valueChanged.connect(self.shot_changed)
+        shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1424, 800))
         self.setCentralWidget(container)
@@ -226,32 +223,19 @@ class MainWindow(QMainWindow):
             self.signBy = rb.sign
             #self.result_label.setText(f'You selected {rb.text()}')
 
-    def update_ce(self, s):
-        if (Qt.CheckState(s) == Qt.CheckState.Checked):
-            self.query.bindValue(":ce_checked", '1')
-        else:
-            self.query.bindValue(":ce_checked", '0')
-        self.update_query()
-
-    def update_re(self, s):
-        if (Qt.CheckState(s) == Qt.CheckState.Checked):
-            self.query.bindValue(":re_checked", '1')
-            print(Qt.CheckState(s) == Qt.CheckState.Checked)
-        else:
-            self.query.bindValue(":re_checked", '0')
-            print(Qt.CheckState(s) == Qt.CheckState.Checked)
-        self.update_query()
-        print(s)
-
     def update_query(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        self.query.bindValue(":list_id", self.list.text())
+        self.query.bindValue(":list_id", self.listId)
         self.query.bindValue(":plan_id", self.planId)
         self.query.exec()
         self.model.setQuery(self.query)
 #        self.table.setColumnWidth(0,160)
         self.table.setColumnWidth(1,60)
+
+        self.queryLastCL.bindValue(":shot_no", self.shotNo)
+        self.queryLastCL.exec()
+
 
 #    def update_filter(self, s):
 #        filter_str = 'Checklist LIKE "{}"'.format(s)
