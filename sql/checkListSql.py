@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QCheckBox,
     QComboBox,
+    QSpinBox,
     QRadioButton,
     QLabel,
 )
@@ -85,6 +86,24 @@ class MainWindow(QMainWindow):
         self.reChck.stateChanged.connect(self.update_re)
 
         layoutTools.addWidget(refreshButt)
+        layoutTools.addWidget(QLabel('Exp. Phase'))
+        layoutTools.addWidget(QLabel('Checklist:'))
+        listComb = QComboBox()
+        listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
+        self.listId = 0
+        layoutTools.addWidget(listComb)
+
+        shotSpin = QSpinBox()
+        shotSpin.setMinimum(170)
+        shotSpin.setMaximum(1000) # May need to change (hopefully)
+# Or: widget.setRange(-10,3)
+    #widget.setPrefix("$")
+#widget.setSuffix("c")
+        shotSpin.setSingleStep(1) # Or e.g. 0.5 for QDoubleSpinBox
+        self.shotNo = 177
+        shotSpin.setValue(self.shotNo)
+        layoutTools.addWidget(shotSpin)
+
         layoutTools.addWidget(widget)
         layoutTools.addWidget(QLabel('Filter Checklist:'))
         layoutTools.addWidget(self.shot)
