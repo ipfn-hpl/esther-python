@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget,
     QPushButton,
     QCheckBox,
+    QComboBox,
     QRadioButton,
     QLabel,
 )
@@ -75,12 +76,16 @@ class MainWindow(QMainWindow):
 # For tristate: widget.setCheckState(Qt.PartiallyChecked)
 # Or: widget.setTristate(True)
         self.ceChck.stateChanged.connect(self.update_ce)
-
+        widget = QComboBox()
+        widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
+        widget.currentIndexChanged.connect(self.plan_changed)
+        self.planId = 0
         self.reChck = QCheckBox("Researcher")
         self.reChck.setCheckState(Qt.CheckState.Unchecked)
         self.reChck.stateChanged.connect(self.update_re)
 
         layoutTools.addWidget(refreshButt)
+        layoutTools.addWidget(widget)
         layoutTools.addWidget(QLabel('Filter Checklist:'))
         layoutTools.addWidget(self.shot)
         layoutTools.addWidget(self.list)
@@ -113,12 +118,16 @@ class MainWindow(QMainWindow):
         #self.table = QTableView()
         self.model = QSqlQueryModel()
         self.table.setModel(self.model)
+        self.table.setColumnWidth(0,160)
         #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
         self.query = QSqlQuery(db=db)
         self.query.prepare(
-            "SELECT DayPlan, EstherChecklists.ChecklistName, ChiefEngineer, Researcher, LineStatus FROM ChecklistLines "
+            "SELECT DayPlans.DayPlanName, EstherChecklists.ChecklistName, EstherRoles.RoleName, LineStatus FROM ChecklistLines "
+            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
             "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-            "WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineOrder ASC"
         )
         #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
@@ -126,8 +135,9 @@ class MainWindow(QMainWindow):
 
         #self.table.setModel(self.model)
         self.query.bindValue(":list_id", 1)
-        self.query.bindValue(":ce_checked", '1')
-        self.query.bindValue(":re_checked", '0')
+        self.query.bindValue(":plan_id", self.planId)
+        #self.query.bindValue(":ce_checked", '1')
+        #self.query.bindValue(":re_checked", '0')
 
         #self.model.removeColumns(0,1)
         #self.model.select()
@@ -173,6 +183,11 @@ class MainWindow(QMainWindow):
         self.update_query()
         self.setMinimumSize(QSize(1424, 800))
         self.setCentralWidget(container)
+        
+    def plan_changed(self, i):
+        print('plan is ' + str(i))
+        self.planId = i
+        self.update_query()
 
     def update_sign(self):
         # get the radio button the send the signal
@@ -206,8 +221,11 @@ class MainWindow(QMainWindow):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
         self.query.bindValue(":list_id", self.list.text())
+        self.query.bindValue(":plan_id", self.planId)
         self.query.exec()
         self.model.setQuery(self.query)
+#        self.table.setColumnWidth(0,160)
+        self.table.setColumnWidth(1,60)
 
 #    def update_filter(self, s):
 #        filter_str = 'Checklist LIKE "{}"'.format(s)
