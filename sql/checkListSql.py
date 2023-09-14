@@ -72,11 +72,7 @@ class MainWindow(QMainWindow):
         self.list = QLineEdit()
         self.list.setPlaceholderText("1")
         self.list.textChanged.connect(self.update_query)
-        self.ceChck = QCheckBox("Chief Engineer")
-        self.ceChck.setCheckState(Qt.CheckState.Checked)
-# For tristate: widget.setCheckState(Qt.PartiallyChecked)
-# Or: widget.setTristate(True)
-        self.ceChck.stateChanged.connect(self.update_ce)
+        
         widget = QComboBox()
         widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
         widget.currentIndexChanged.connect(self.plan_changed)
@@ -88,6 +84,7 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(refreshButt)
         layoutTools.addWidget(QLabel('Exp. Phase'))
         layoutTools.addWidget(QLabel('Checklist:'))
+
         listComb = QComboBox()
         listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
         self.listId = 0
@@ -108,8 +105,6 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(QLabel('Filter Checklist:'))
         layoutTools.addWidget(self.shot)
         layoutTools.addWidget(self.list)
-        layoutTools.addWidget(self.ceChck)
-        layoutTools.addWidget(self.reChck)
 
         radiobutton = QRadioButton('ChiefEngineer', self)
         radiobutton.setChecked(True)
@@ -200,12 +195,24 @@ class MainWindow(QMainWindow):
         print(self.queryWaitOK.lastQuery())
 
         self.update_query()
+        #shotSpin.valueChanged.connect(self.shot_changed)
+        listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1424, 800))
         self.setCentralWidget(container)
         
     def plan_changed(self, i):
         print('plan is ' + str(i))
         self.planId = i
+        self.update_query()
+
+    def list_changed(self, i):
+        print('list is ' + str(i))
+        self.listId = i
+        self.update_query()
+
+    def shot_changed(self, i):
+        print('shot is ' + str(i))
+        self.shotNo = i
         self.update_query()
 
     def update_sign(self):
