@@ -67,21 +67,20 @@ class MainWindow(QMainWindow):
 #        refreshButt.clicked.connect(self.refresh_model)
 
 #        layoutTools.addWidget(add_rec)
-        self.shot = QLineEdit()
-        self.shot.setPlaceholderText("177")
 #        self.list = QLineEdit()
 #        self.list.setPlaceholderText("1")
 #        self.list.textChanged.connect(self.update_query)
         
+        layoutTools.addWidget(refreshButt)
+        layoutTools.addWidget(QLabel('Exp. Phase'))
         widget = QComboBox()
         widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
         widget.currentIndexChanged.connect(self.plan_changed)
         self.planId = 0
         
-        layoutTools.addWidget(refreshButt)
-        layoutTools.addWidget(QLabel('Exp. Phase'))
-        layoutTools.addWidget(QLabel('Checklist:'))
+        layoutTools.addWidget(widget)
 
+        layoutTools.addWidget(QLabel('Checklist:'))
         listComb = QComboBox()
         listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
         self.listId = 0
@@ -99,21 +98,18 @@ class MainWindow(QMainWindow):
         shotSpin.setValue(self.shotNo)
         layoutTools.addWidget(shotSpin)
 
-        layoutTools.addWidget(widget)
-        layoutTools.addWidget(QLabel('Filter Checklist:'))
-        layoutTools.addWidget(self.shot)
+#        layoutTools.addWidget(QLabel('Filter Checklist:'))
 #        layoutTools.addWidget(self.list)
 
+        layoutTools.addWidget(QLabel('Checked By: '))
         radiobutton = QRadioButton('ChiefEngineer', self)
         radiobutton.setChecked(True)
-        #radiobutton.sign = "0"
         radiobutton.sign = 0
         self.signBy = 0
         radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
 
         radiobutton = QRadioButton('Researcher', self)
-        #radiobutton.sign = "Researcher"
         radiobutton.sign = 1
         radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
@@ -146,9 +142,6 @@ class MainWindow(QMainWindow):
         #self.table.setModel(self.model)
         self.queryCL.bindValue(":list_id", 0)
         self.queryCL.bindValue(":plan_id", self.planId)
-        #self.query.bindValue(":ce_checked", '1')
-        #self.query.bindValue(":re_checked", '0')
-        self.modelCL.setQuery(self.queryCL)
 
         #self.model.removeColumns(0,1)
         #self.model.select()
@@ -165,13 +158,12 @@ class MainWindow(QMainWindow):
             "ORDER BY LineStatusDate ASC LIMIT 5"
         )
         self.queryLastCL.bindValue(":shot_no", 177)
-        self.queryLastCL.exec()
+        #self.queryLastCL.exec()
         lastOK  = 0
         while self.queryLastCL.next():
             lastOK  = self.queryLastCL.value(0)
-        self.modelLastCL.setQuery(self.queryLastCL)
         print(self.queryLastCL.lastQuery())
-        self.update_query()
+        #self.update_queryLastCL()
         print("lastOrder: " + str(lastOK))
 
         self.modelWaitOK = QSqlQueryModel()
@@ -192,6 +184,7 @@ class MainWindow(QMainWindow):
         print(self.queryWaitOK.lastQuery())
 
         self.update_queryCL()
+        self.update_queryLastCL()
         shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1424, 800))
@@ -200,7 +193,7 @@ class MainWindow(QMainWindow):
     def plan_changed(self, i):
         print('plan is ' + str(i))
         self.planId = i
-        self.update_query()
+        self.update_queryCL()
 
     def list_changed(self, i):
         print('list is ' + str(i))
@@ -210,7 +203,7 @@ class MainWindow(QMainWindow):
     def shot_changed(self, i):
         print('shot is ' + str(i))
         self.shotNo = i
-        self.update_queryCL()
+        self.update_queryLastCL()
 
     def update_signBy(self):
         # get the radio button the send the signal
@@ -229,20 +222,16 @@ class MainWindow(QMainWindow):
         self.queryCL.exec()
         self.modelCL.setQuery(self.queryCL)
         self.tableCL.setColumnWidth(0,160)
-        self.tableCL.setColumnWidth(1,360)
-        self.tableCL.setColumnWidth(2,2000)
+        self.tableCL.setColumnWidth(1,160)
+        self.tableCL.setColumnWidth(2,300)
 
-    def update_query(self, s=None):
+    def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        #self.queryCL.bindValue(":list_id", self.listId)
-        #self.queryCL.bindValue(":plan_id", self.planId)
-        #self.queryCL.exec()
-        #self.model.setQuery(self.queryCL)
-#        self.table.setColumnWidth(0,160)
-
         self.queryLastCL.bindValue(":shot_no", self.shotNo)
         self.queryLastCL.exec()
+        self.modelLastCL.setQuery(self.queryLastCL)
+        self.tableLastCL.setColumnWidth(2,260)
 
 
 #    def update_filter(self, s):
