@@ -269,11 +269,13 @@ class MainWindow(QMainWindow):
 
     def checkButt_click(self):
         self.insertCLine.bindValue(":shot_no", self.shotNo)
-        self.insertCLine.bindValue(":cLine_id", 5)
-        self.insertCLine.bindValue(":sign_by", 0)
+        self.insertCLine.bindValue(":cLine_id", 6)
+        self.insertCLine.bindValue(":sign_by", self.signBy)
         #self.insertCLine.bindValue(":sign_by", self.shotNo)
         if self.insertCLine.exec():
             print("Inserted record")
+            self.update_queryLastCL()
+            #self.update_queryWaitOK()
         else:
             print("NOT Inserted")
 
