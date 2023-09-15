@@ -120,8 +120,6 @@ class MainWindow(QMainWindow):
         layoutMain.addLayout(layoutTools)
         layoutMain.addWidget(self.tableCL)
         layoutMain.addWidget(self.tableLastCL)
-        layoutMain.addWidget(self.tableWaitOK)
-        container.setLayout(layoutMain)
         
         #self.table = QTableView()
         self.modelCL = QSqlQueryModel()
@@ -129,7 +127,8 @@ class MainWindow(QMainWindow):
         #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
         self.queryCL = QSqlQuery(db=db)
         self.queryCL.prepare(
-            "SELECT DayPlans.DayPlanName, EstherChecklists.ChecklistName, EstherRoles.RoleName, LineStatus FROM ChecklistLines "
+            "SELECT DayPlans.DayPlanName, EstherChecklists.ChecklistName, EstherRoles.RoleName, "
+            "LineOrder, LineStatus, LineDesc FROM ChecklistLines "
             "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
             "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
             "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
@@ -149,7 +148,7 @@ class MainWindow(QMainWindow):
         self.tableLastCL.setModel(self.modelLastCL)
         self.queryLastCL = QSqlQuery(db=db)
         self.queryLastCL.prepare(
-            "SELECT ChecklistLines.LineOrder, LineStatusDate, CheckLine, ChecklistLines.LineDesc, EstherRoles.RoleName "
+            "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, EstherRoles.RoleName "
             "FROM CheckLinesOk "
             "INNER JOIN ChecklistLines ON CheckLinesOk.CheckLine = ChecklistLines.CheckLineId "
             "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
@@ -159,18 +158,23 @@ class MainWindow(QMainWindow):
         )
         self.queryLastCL.bindValue(":shot_no", 177)
         #self.queryLastCL.exec()
-        lastOK  = 0
-        while self.queryLastCL.next():
-            lastOK  = self.queryLastCL.value(0)
-        print(self.queryLastCL.lastQuery())
-        #self.update_queryLastCL()
-        print("lastOrder: " + str(lastOK))
+
+# Third Panel
+
+        self.insertCLine = QSqlQuery(db=db)
+        self.insertCLine.prepare(
+                "INSERT INTO CheckLinesOk VALUES (NULL, :shot_no , current_timestamp(), :cLine_id, :sign_by)"
+        )
+        layoutTools = QHBoxLayout()
+        checkButt = QPushButton("Check this Line")
+        checkButt.clicked.connect(self.checkButt_click)
+        layoutTools.addWidget(checkButt)
+        layoutMain.addLayout(layoutTools)
 
         self.modelWaitOK = QSqlQueryModel()
         self.tableWaitOK.setModel(self.modelWaitOK)
         self.queryWaitOK = QSqlQuery(db=db)
         self.queryWaitOK.prepare(
-            #"SELECT * FROM ChecklistLines "
             "SELECT CheckLineId, LineOrder, LineDesc "
             "FROM ChecklistLines "
             "WHERE LineOrder > :l_order "
@@ -178,20 +182,26 @@ class MainWindow(QMainWindow):
             "ORDER BY LineOrder ASC LIMIT 3"
             #"ORDER BY LineStatusDate DESC LIMIT 5"
         )
+        lastOK  = 0
+        self.lastSigned = lastOK
         self.queryWaitOK.bindValue(":l_order", lastOK)
         self.queryWaitOK.exec()
         self.modelWaitOK.setQuery(self.queryWaitOK) 
         print(self.queryWaitOK.lastQuery())
 
+        layoutMain.addWidget(self.tableWaitOK)
+        container.setLayout(layoutMain)
+
         self.update_queryCL()
         self.update_queryLastCL()
+        self.update_queryWaitOK()
         shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1424, 800))
         self.setCentralWidget(container)
         
     def plan_changed(self, i):
-        print('plan is ' + str(i))
+#        print('plan is ' + str(i))
         self.planId = i
         self.update_queryCL()
 
@@ -231,8 +241,41 @@ class MainWindow(QMainWindow):
         self.queryLastCL.bindValue(":shot_no", self.shotNo)
         self.queryLastCL.exec()
         self.modelLastCL.setQuery(self.queryLastCL)
-        self.tableLastCL.setColumnWidth(2,260)
+        self.tableLastCL.setColumnWidth(3,260)
 
+        #while self.queryLastCL.next():
+        #    lastOK  = self.queryLastCL.value(0)
+        if self.queryLastCL.last():
+            lastLineId  = self.queryLastCL.value(0)
+            lastOK      = self.queryLastCL.value(1)
+        else:
+            lastOK  = 0
+            lastLineId  = 0
+        #print(self.queryLastCL.lastQuery())
+        #self.update_queryLastCL()
+        self.lastSigned = lastOK
+        self.lastSignedId = lastLineId
+        print("lastOrder: " + str(lastOK)+ ", lastLineId: " + str(lastLineId))
+
+    def update_queryWaitOK(self):
+        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
+        #print(s)
+        self.queryWaitOK.bindValue(":l_order", self.lastSigned)
+        self.queryWaitOK.exec()
+        self.modelWaitOK.setQuery(self.queryWaitOK)
+        self.tableWaitOK.setColumnWidth(0,160)
+        self.tableWaitOK.setColumnWidth(1,160)
+        self.tableWaitOK.setColumnWidth(2,300)
+
+    def checkButt_click(self):
+        self.insertCLine.bindValue(":shot_no", self.shotNo)
+        self.insertCLine.bindValue(":cLine_id", 5)
+        self.insertCLine.bindValue(":sign_by", 0)
+        #self.insertCLine.bindValue(":sign_by", self.shotNo)
+        if self.insertCLine.exec():
+            print("Inserted record")
+        else:
+            print("NOT Inserted")
 
 #    def update_filter(self, s):
 #        filter_str = 'Checklist LIKE "{}"'.format(s)
