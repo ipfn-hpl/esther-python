@@ -69,9 +69,9 @@ class MainWindow(QMainWindow):
 #        layoutTools.addWidget(add_rec)
         self.shot = QLineEdit()
         self.shot.setPlaceholderText("177")
-        self.list = QLineEdit()
-        self.list.setPlaceholderText("1")
-        self.list.textChanged.connect(self.update_query)
+#        self.list = QLineEdit()
+#        self.list.setPlaceholderText("1")
+#        self.list.textChanged.connect(self.update_query)
         
         widget = QComboBox()
         widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
@@ -102,38 +102,37 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(widget)
         layoutTools.addWidget(QLabel('Filter Checklist:'))
         layoutTools.addWidget(self.shot)
-        layoutTools.addWidget(self.list)
+#        layoutTools.addWidget(self.list)
 
         radiobutton = QRadioButton('ChiefEngineer', self)
         radiobutton.setChecked(True)
         #radiobutton.sign = "0"
         radiobutton.sign = 0
         self.signBy = 0
-        radiobutton.toggled.connect(self.update_sign)
+        radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
 
         radiobutton = QRadioButton('Researcher', self)
         #radiobutton.sign = "Researcher"
         radiobutton.sign = 1
-        radiobutton.toggled.connect(self.update_sign)
+        radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
 
-        self.table = QTableView()
+        self.tableCL = QTableView()
         self.tableLastCL = QTableView()
         self.tableWaitOK = QTableView()
         layoutMain.addLayout(layoutTools)
-        layoutMain.addWidget(self.table)
+        layoutMain.addWidget(self.tableCL)
         layoutMain.addWidget(self.tableLastCL)
         layoutMain.addWidget(self.tableWaitOK)
         container.setLayout(layoutMain)
         
         #self.table = QTableView()
-        self.model = QSqlQueryModel()
-        self.table.setModel(self.model)
-        self.table.setColumnWidth(0,160)
+        self.modelCL = QSqlQueryModel()
+        self.tableCL.setModel(self.modelCL)
         #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
-        self.query = QSqlQuery(db=db)
-        self.query.prepare(
+        self.queryCL = QSqlQuery(db=db)
+        self.queryCL.prepare(
             "SELECT DayPlans.DayPlanName, EstherChecklists.ChecklistName, EstherRoles.RoleName, LineStatus FROM ChecklistLines "
             "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
             "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
@@ -145,10 +144,11 @@ class MainWindow(QMainWindow):
         #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
 
         #self.table.setModel(self.model)
-        self.query.bindValue(":list_id", 0)
-        self.query.bindValue(":plan_id", self.planId)
+        self.queryCL.bindValue(":list_id", 0)
+        self.queryCL.bindValue(":plan_id", self.planId)
         #self.query.bindValue(":ce_checked", '1')
         #self.query.bindValue(":re_checked", '0')
+        self.modelCL.setQuery(self.queryCL)
 
         #self.model.removeColumns(0,1)
         #self.model.select()
@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
         self.modelWaitOK.setQuery(self.queryWaitOK) 
         print(self.queryWaitOK.lastQuery())
 
-        self.update_query()
+        self.update_queryCL()
         shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1424, 800))
@@ -205,33 +205,41 @@ class MainWindow(QMainWindow):
     def list_changed(self, i):
         print('list is ' + str(i))
         self.listId = i
-        self.update_query()
+        self.update_queryCL()
 
     def shot_changed(self, i):
         print('shot is ' + str(i))
         self.shotNo = i
-        self.update_query()
+        self.update_queryCL()
 
-    def update_sign(self):
+    def update_signBy(self):
         # get the radio button the send the signal
         rb = self.sender()
-
         # check if the radio button is checked
-
         if rb.isChecked():
             print("sign is %s" % (rb.sign))
             self.signBy = rb.sign
             #self.result_label.setText(f'You selected {rb.text()}')
 
+    def update_queryCL(self, s=None):
+        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
+        #print(s)
+        self.queryCL.bindValue(":list_id", self.listId)
+        self.queryCL.bindValue(":plan_id", self.planId)
+        self.queryCL.exec()
+        self.modelCL.setQuery(self.queryCL)
+        self.tableCL.setColumnWidth(0,160)
+        self.tableCL.setColumnWidth(1,360)
+        self.tableCL.setColumnWidth(2,2000)
+
     def update_query(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        self.query.bindValue(":list_id", self.listId)
-        self.query.bindValue(":plan_id", self.planId)
-        self.query.exec()
-        self.model.setQuery(self.query)
+        #self.queryCL.bindValue(":list_id", self.listId)
+        #self.queryCL.bindValue(":plan_id", self.planId)
+        #self.queryCL.exec()
+        #self.model.setQuery(self.queryCL)
 #        self.table.setColumnWidth(0,160)
-        self.table.setColumnWidth(1,60)
 
         self.queryLastCL.bindValue(":shot_no", self.shotNo)
         self.queryLastCL.exec()
