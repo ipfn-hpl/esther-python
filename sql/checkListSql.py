@@ -25,6 +25,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QWidget,
+    QDialog,
+    QDialogButtonBox,
     QPushButton,
     QCheckBox,
     QComboBox,
@@ -48,6 +50,28 @@ db.setUserName("archive");
 db.setPassword("$archive");
 
 db.open()
+
+class CustomDialog(QDialog):
+    def __init__(self, parent=None):  # <1>
+        super().__init__(parent)
+
+        self.setWindowTitle("HELLO!")
+
+        buttons = (
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+
+        self.buttonBox = QDialogButtonBox(buttons)
+        #self.buttonBox.accepted.connect(self.accept)
+        #self.buttonBox.rejected.connect(self.reject)
+
+        self.layout = QVBoxLayout()
+        message = QLabel("Something happened, is that OK?")
+        self.layout.addWidget(message)
+        self.layout.addWidget(self.buttonBox)
+        self.setLayout(self.layout)
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -144,19 +168,6 @@ class MainWindow(QMainWindow):
 
         #self.model.removeColumns(0,1)
         #self.model.select()
-        self.modelLastCL = QSqlQueryModel()
-        self.tableLastCL.setModel(self.modelLastCL)
-        self.queryLastCL = QSqlQuery(db=db)
-        self.queryLastCL.prepare(
-            "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, EstherRoles.RoleName "
-            "FROM CheckLinesOk "
-            "INNER JOIN ChecklistLines ON CheckLinesOk.CheckLine = ChecklistLines.CheckLineId "
-            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
-            "WHERE CheckLinesOk.ShotNumber = :shot_no "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineStatusDate ASC LIMIT 5"
-        )
-        self.queryLastCL.bindValue(":shot_no", 177)
         #self.queryLastCL.exec()
 
 # Third Panel
@@ -222,6 +233,7 @@ class MainWindow(QMainWindow):
         if rb.isChecked():
             print("sign is %s" % (rb.sign))
             self.signBy = rb.sign
+            self.update_queryLastCL()
             #self.result_label.setText(f'You selected {rb.text()}')
 
     def update_queryCL(self, s=None):
@@ -232,22 +244,41 @@ class MainWindow(QMainWindow):
         self.queryCL.exec()
         self.modelCL.setQuery(self.queryCL)
         self.tableCL.setColumnWidth(0,160)
-        self.tableCL.setColumnWidth(1,160)
-        self.tableCL.setColumnWidth(2,300)
+        self.tableCL.setColumnWidth(1,60)
+        self.tableCL.setColumnWidth(2,100)
+        self.tableCL.setColumnWidth(3,100)
+        self.tableCL.setColumnWidth(4,100)
+        self.tableCL.setColumnWidth(5,300)
 
     def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        self.queryLastCL.bindValue(":shot_no", self.shotNo)
-        self.queryLastCL.exec()
-        self.modelLastCL.setQuery(self.queryLastCL)
-        self.tableLastCL.setColumnWidth(3,260)
+        queryLastCL = QSqlQuery(db=db)
+        queryLastCL.prepare(
+            "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLinesOk.SignedBy, EstherRoles.RoleName "
+            "FROM CheckLinesOk "
+            "INNER JOIN ChecklistLines ON CheckLinesOk.CheckLine = ChecklistLines.CheckLineId "
+            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+            "WHERE CheckLinesOk.ShotNumber = :shot_no AND CheckLinesOk.SignedBy = :sign_by "
+            # "WHERE CheckLinesOk.ShotNumber = :shot_no "
+            #"WHERE ChecklistLines.Checklist = :list_id "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY LineStatusDate DESC LIMIT 4"
+        )
+        queryLastCL.bindValue(":shot_no", self.shotNo)
+        queryLastCL.bindValue(":sign_by", self.signBy)
+        queryLastCL.exec()
+        #print("Last CL executedQuery : " + queryLastCL.executedQuery() + " signBy: " + str(self.signBy))
+        modelLastCL = QSqlQueryModel()
+        modelLastCL.setQuery(queryLastCL)
+        self.tableLastCL.setModel(modelLastCL)
+        self.tableLastCL.setColumnWidth(3,300)
 
         #while self.queryLastCL.next():
         #    lastOK  = self.queryLastCL.value(0)
-        if self.queryLastCL.last():
-            lastLineId  = self.queryLastCL.value(0)
-            lastOK      = self.queryLastCL.value(1)
+        if queryLastCL.first():
+            lastLineId  = queryLastCL.value(0)
+            lastOK      = queryLastCL.value(1)
         else:
             lastOK  = 0
             lastLineId  = 0
@@ -271,13 +302,19 @@ class MainWindow(QMainWindow):
         self.insertCLine.bindValue(":shot_no", self.shotNo)
         self.insertCLine.bindValue(":cLine_id", 6)
         self.insertCLine.bindValue(":sign_by", self.signBy)
-        #self.insertCLine.bindValue(":sign_by", self.shotNo)
-        if self.insertCLine.exec():
-            print("Inserted record")
-            self.update_queryLastCL()
-            #self.update_queryWaitOK()
+        dlg = CustomDialog(self)
+        if dlg.exec():
+            print("Success!")
         else:
-            print("NOT Inserted")
+            print("Cancel!")
+
+        #self.insertCLine.bindValue(":sign_by", self.shotNo)
+        # if self.insertCLine.exec():
+            # print("Inserted record")
+            # self.update_queryLastCL()
+            # #self.update_queryWaitOK()
+        # else:
+            # print("NOT Inserted")
 
 #    def update_filter(self, s):
 #        filter_str = 'Checklist LIKE "{}"'.format(s)
