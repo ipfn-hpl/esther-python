@@ -51,11 +51,11 @@ db.setPassword("$archive");
 
 db.open()
 
-class CustomDialog(QDialog):
+class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
 
-        self.setWindowTitle("HELLO!")
+        self.setWindowTitle("Sign Line!")
 
         buttons = (
             QDialogButtonBox.StandardButton.Ok
@@ -63,11 +63,11 @@ class CustomDialog(QDialog):
         )
 
         self.buttonBox = QDialogButtonBox(buttons)
-        #self.buttonBox.accepted.connect(self.accept)
-        #self.buttonBox.rejected.connect(self.reject)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
 
         self.layout = QVBoxLayout()
-        message = QLabel("Something happened, is that OK?")
+        message = QLabel("Sure youwant to sign this Checkline?")
         self.layout.addWidget(message)
         self.layout.addWidget(self.buttonBox)
         self.setLayout(self.layout)
@@ -178,28 +178,11 @@ class MainWindow(QMainWindow):
         )
         layoutTools = QHBoxLayout()
         checkButt = QPushButton("Check this Line")
-        checkButt.clicked.connect(self.checkButt_click)
+        checkButt.clicked.connect(self.checkButt_clicked)
         layoutTools.addWidget(checkButt)
         layoutMain.addLayout(layoutTools)
 
-        self.modelWaitOK = QSqlQueryModel()
-        self.tableWaitOK.setModel(self.modelWaitOK)
-        self.queryWaitOK = QSqlQuery(db=db)
-        self.queryWaitOK.prepare(
-            "SELECT CheckLineId, LineOrder, LineDesc "
-            "FROM ChecklistLines "
-            "WHERE LineOrder > :l_order "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineOrder ASC LIMIT 3"
-            #"ORDER BY LineStatusDate DESC LIMIT 5"
-        )
-        lastOK  = 0
-        self.lastSigned = lastOK
-        self.queryWaitOK.bindValue(":l_order", lastOK)
-        self.queryWaitOK.exec()
-        self.modelWaitOK.setQuery(self.queryWaitOK) 
-        print(self.queryWaitOK.lastQuery())
-
+        self.lastSigned = 0
         layoutMain.addWidget(self.tableWaitOK)
         container.setLayout(layoutMain)
 
@@ -215,16 +198,19 @@ class MainWindow(QMainWindow):
 #        print('plan is ' + str(i))
         self.planId = i
         self.update_queryCL()
+        self.update_queryWaitOK()
 
     def list_changed(self, i):
         print('list is ' + str(i))
         self.listId = i
         self.update_queryCL()
+        self.update_queryWaitOK()
 
     def shot_changed(self, i):
         print('shot is ' + str(i))
         self.shotNo = i
         self.update_queryLastCL()
+        self.update_queryWaitOK()
 
     def update_signBy(self):
         # get the radio button the send the signal
@@ -234,6 +220,7 @@ class MainWindow(QMainWindow):
             print("sign is %s" % (rb.sign))
             self.signBy = rb.sign
             self.update_queryLastCL()
+            self.update_queryWaitOK()
             #self.result_label.setText(f'You selected {rb.text()}')
 
     def update_queryCL(self, s=None):
@@ -291,20 +278,36 @@ class MainWindow(QMainWindow):
     def update_queryWaitOK(self):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        self.queryWaitOK.bindValue(":l_order", self.lastSigned)
-        self.queryWaitOK.exec()
-        self.modelWaitOK.setQuery(self.queryWaitOK)
+        queryWaitOK = QSqlQuery(db=db)
+        queryWaitOK.prepare(
+            "SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
+            "FROM ChecklistLines "
+            "WHERE LineOrder > :l_order AND Checklist = :list_id "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY LineOrder ASC LIMIT 3"
+        )
+        #queryWaitOK.bindValue(":l_order", lastOK)
+
+        queryWaitOK.bindValue(":l_order", self.lastSigned)
+        queryWaitOK.bindValue(":list_id", self.listId)
+        queryWaitOK.exec()
+        print("Wait: " + queryWaitOK.lastQuery())
+        modelWaitOK = QSqlQueryModel()
+        modelWaitOK.setQuery(queryWaitOK)
+        self.tableWaitOK.setModel(modelWaitOK)
         self.tableWaitOK.setColumnWidth(0,160)
         self.tableWaitOK.setColumnWidth(1,160)
         self.tableWaitOK.setColumnWidth(2,300)
 
-    def checkButt_click(self):
+    def checkButt_clicked(self, s):
+        print("click ", s)
         self.insertCLine.bindValue(":shot_no", self.shotNo)
-        self.insertCLine.bindValue(":cLine_id", 6)
+        # self.insertCLine.bindValue(":cLine_id", 6)
+        self.insertCLine.bindValue(":cLine_id", self.lastSignedId)
         self.insertCLine.bindValue(":sign_by", self.signBy)
-        dlg = CustomDialog(self)
+        dlg = SignDialog(self)
         if dlg.exec():
-            print("Success!")
+            print("Success! " + str(self.lastSigned))
         else:
             print("Cancel!")
 
