@@ -77,6 +77,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        self.listId = 0
+        self.planId = 1
+        self.lastSigned = 0
+        self.nextLineId  = 0
+        self.tableCL = QTableView()
+        self.tableLastCL = QTableView()
+        self.tableWaitOK = QTableView()
         container = QWidget()
         layoutMain = QVBoxLayout()
         layoutTools = QHBoxLayout()
@@ -100,14 +107,12 @@ class MainWindow(QMainWindow):
         widget = QComboBox()
         widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
         widget.currentIndexChanged.connect(self.plan_changed)
-        self.planId = 0
-        
+        widget.setCurrentIndex(self.planId)
         layoutTools.addWidget(widget)
 
         layoutTools.addWidget(QLabel('Checklist:'))
         listComb = QComboBox()
         listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
-        self.listId = 0
         layoutTools.addWidget(listComb)
 
         layoutTools.addWidget(QLabel('Shot'))
@@ -138,51 +143,24 @@ class MainWindow(QMainWindow):
         radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
 
-        self.tableCL = QTableView()
-        self.tableLastCL = QTableView()
-        self.tableWaitOK = QTableView()
         layoutMain.addLayout(layoutTools)
         layoutMain.addWidget(self.tableCL)
         layoutMain.addWidget(self.tableLastCL)
         
         #self.table = QTableView()
-        self.modelCL = QSqlQueryModel()
-        self.tableCL.setModel(self.modelCL)
         #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
-        self.queryCL = QSqlQuery(db=db)
-        self.queryCL.prepare(
-            "SELECT DayPlans.DayPlanName, EstherChecklists.ChecklistName, EstherRoles.RoleName, "
-            "LineOrder, LineStatus, LineDesc FROM ChecklistLines "
-            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-            "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
-            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
-            "ORDER BY LineOrder ASC"
-        )
-        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
-        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
-
-        #self.table.setModel(self.model)
-        self.queryCL.bindValue(":list_id", 0)
-        self.queryCL.bindValue(":plan_id", self.planId)
-
         #self.model.removeColumns(0,1)
         #self.model.select()
         #self.queryLastCL.exec()
 
 # Third Panel
 
-        self.insertCLine = QSqlQuery(db=db)
-        self.insertCLine.prepare(
-                "INSERT INTO CheckLinesOk VALUES (NULL, :shot_no , current_timestamp(), :cLine_id, :sign_by)"
-        )
         layoutTools = QHBoxLayout()
         checkButt = QPushButton("Check this Line")
         checkButt.clicked.connect(self.checkButt_clicked)
         layoutTools.addWidget(checkButt)
         layoutMain.addLayout(layoutTools)
 
-        self.lastSigned = 0
         layoutMain.addWidget(self.tableWaitOK)
         container.setLayout(layoutMain)
 
@@ -226,12 +204,27 @@ class MainWindow(QMainWindow):
     def update_queryCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        self.queryCL.bindValue(":list_id", self.listId)
-        self.queryCL.bindValue(":plan_id", self.planId)
-        self.queryCL.exec()
-        self.modelCL.setQuery(self.queryCL)
-        self.tableCL.setColumnWidth(0,160)
-        self.tableCL.setColumnWidth(1,60)
+        queryCL = QSqlQuery(db=db)
+        queryCL.prepare(
+            "SELECT ChecklistId, ChecklistName, EstherRoles.RoleName, "
+            "LineOrder, LineStatus, LineDesc FROM ChecklistLines "
+            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
+            "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
+            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
+            "ORDER BY LineOrder ASC"
+        )
+        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
+        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
+
+        queryCL.bindValue(":list_id", self.listId)
+        queryCL.bindValue(":plan_id", self.planId)
+        queryCL.exec()
+        modelCL = QSqlQueryModel()
+        modelCL.setQuery(queryCL)
+        self.tableCL.setModel(modelCL)
+        self.tableCL.setColumnWidth(0,60)
+        self.tableCL.setColumnWidth(1,160)
         self.tableCL.setColumnWidth(2,100)
         self.tableCL.setColumnWidth(3,100)
         self.tableCL.setColumnWidth(4,100)
@@ -246,14 +239,13 @@ class MainWindow(QMainWindow):
             "FROM CheckLinesOk "
             "INNER JOIN ChecklistLines ON CheckLinesOk.CheckLine = ChecklistLines.CheckLineId "
             "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
-            "WHERE CheckLinesOk.ShotNumber = :shot_no AND CheckLinesOk.SignedBy = :sign_by "
-            # "WHERE CheckLinesOk.ShotNumber = :shot_no "
-            #"WHERE ChecklistLines.Checklist = :list_id "
+            "WHERE CheckLinesOk.ShotNumber = :shot_no AND CheckLinesOk.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineStatusDate DESC LIMIT 4"
         )
         queryLastCL.bindValue(":shot_no", self.shotNo)
         queryLastCL.bindValue(":sign_by", self.signBy)
+        queryLastCL.bindValue(":list_id", self.listId)
         queryLastCL.exec()
         #print("Last CL executedQuery : " + queryLastCL.executedQuery() + " signBy: " + str(self.signBy))
         modelLastCL = QSqlQueryModel()
@@ -291,7 +283,11 @@ class MainWindow(QMainWindow):
         queryWaitOK.bindValue(":l_order", self.lastSigned)
         queryWaitOK.bindValue(":list_id", self.listId)
         queryWaitOK.exec()
-        print("Wait: " + queryWaitOK.lastQuery())
+        if queryWaitOK.first():
+            self.nextLineId  = queryWaitOK.value(0)
+        else:
+            self.nextLineId  = 0
+        print("Wait: " + queryWaitOK.lastQuery() + ", next Id: " + str(self.nextLineId))
         modelWaitOK = QSqlQueryModel()
         modelWaitOK.setQuery(queryWaitOK)
         self.tableWaitOK.setModel(modelWaitOK)
@@ -301,18 +297,37 @@ class MainWindow(QMainWindow):
 
     def checkButt_clicked(self, s):
         print("click ", s)
-        self.insertCLine.bindValue(":shot_no", self.shotNo)
+        qryCheckPrecedence = QSqlQuery(db=db)
+        qryCheckPrecedence.prepare(
+            "SELECT Line, PrecededBy "
+            "FROM CheckPrecedence "
+            "INNER JOIN ChecklistLines ON Line = ChecklistLines.CheckLineId "
+            "WHERE Line = :list_id "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY Line ASC"
+        )
+        qryCheckPrecedence.bindValue(":list_id", self.nextLineId)
+        qryCheckPrecedence.exec()
+        print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
+        while qryCheckPrecedence.next():
+            lineBefore  = qryCheckPrecedence.value(1)
+            print("Line Before: " + str(lineBefore))
+            #lastLineId  = qryCheckPrecedence.value(0)
+
+        insertCLine = QSqlQuery(db=db)
+        insertCLine.prepare("INSERT INTO CheckLinesOk VALUES (NULL, :shot_no, current_timestamp(), :cLine_id, :sign_by)")
         # self.insertCLine.bindValue(":cLine_id", 6)
-        self.insertCLine.bindValue(":cLine_id", self.lastSignedId)
-        self.insertCLine.bindValue(":sign_by", self.signBy)
         dlg = SignDialog(self)
         if dlg.exec():
             print("Success! " + str(self.lastSigned))
         else:
             print("Cancel!")
 
-        #self.insertCLine.bindValue(":sign_by", self.shotNo)
-        # if self.insertCLine.exec():
+        insertCLine.bindValue(":shot_no", self.shotNo)
+        insertCLine.bindValue(":cLine_id", self.nextLineId)
+        insertCLine.bindValue(":sign_by", self.signBy)
+        #insertCLine.bindValue(":sign_by", self.shotNo)
+        # if insertCLine.exec():
             # print("Inserted record")
             # self.update_queryLastCL()
             # #self.update_queryWaitOK()
