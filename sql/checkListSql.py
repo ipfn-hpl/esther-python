@@ -55,6 +55,7 @@ class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
 
+        #print("Pare: " + str(parent.shotNo))
         self.setWindowTitle("Sign Line!")
 
         buttons = (
@@ -67,7 +68,7 @@ class SignDialog(QDialog):
         self.buttonBox.rejected.connect(self.reject)
 
         self.layout = QVBoxLayout()
-        message = QLabel("Sure youwant to sign this Checkline?")
+        message = QLabel("Sure you want to sign this Checkline?")
         self.layout.addWidget(message)
         self.layout.addWidget(self.buttonBox)
         self.setLayout(self.layout)
@@ -169,7 +170,7 @@ class MainWindow(QMainWindow):
         self.update_queryWaitOK()
         shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
-        self.setMinimumSize(QSize(1424, 800))
+        self.setMinimumSize(QSize(1200, 800))
         self.setCentralWidget(container)
         
     def plan_changed(self, i):
@@ -247,7 +248,7 @@ class MainWindow(QMainWindow):
         queryLastCL.bindValue(":sign_by", self.signBy)
         queryLastCL.bindValue(":list_id", self.listId)
         queryLastCL.exec()
-        print("Last CL Query: " + queryLastCL.executedQuery() + " signBy: " + str(self.signBy))
+        #print("Last CL Query: " + queryLastCL.executedQuery() + " signBy: " + str(self.signBy))
         modelLastCL = QSqlQueryModel()
         modelLastCL.setQuery(queryLastCL)
         self.tableLastCL.setModel(modelLastCL)
@@ -309,33 +310,56 @@ class MainWindow(QMainWindow):
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY Line ASC"
         )
+        qryCheckSigned = QSqlQuery(db=db)
+        qryCheckSigned.prepare(
+            "SELECT CheckLine, ShotNumber, checkValue "
+            "FROM CheckLineSigned "
+            "WHERE CheckLine = :line AND ShotNumber = :shot_no"
+        )
+        
         qryCheckPrecedence.bindValue(":list_id", self.nextLineId)
         qryCheckPrecedence.exec()
-        print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
+        # print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
+        missingSigned = False
         while qryCheckPrecedence.next():
             lineBefore  = qryCheckPrecedence.value(1)
-            print("Line Before: " + str(lineBefore))
+            qryCheckSigned.bindValue(":line", lineBefore)
+            qryCheckSigned.bindValue(":shot_no", self.shotNo)
+            qryCheckSigned.exec()
+            # print(qryCheckSigned.lastQuery() + "; Line Before: " + str(lineBefore))
+            if not qryCheckSigned.first():
+                print("Line Before not Signed: " + str(lineBefore))
+                missingSigned = True
+            else:
+                print("Line Signed Value: " + str(qryCheckSigned.value(2)))
             #lastLineId  = qryCheckPrecedence.value(0)
 
-        insertCLine = QSqlQuery(db=db)
-        insertCLine.prepare("INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, current_timestamp(), :cLine_id, :sign_by)")
-        # self.insertCLine.bindValue(":cLine_id", 6)
-        dlg = SignDialog(self)
-        if dlg.exec():
-            print("Success! " + str(self.lastSigned))
-        else:
-            print("Cancel!")
+        if missingSigned:
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Missing Signatures. Please Check.")
+            dlg.resize(400, 100)
+            dlg.exec()
+            return
 
+        insertCLine = QSqlQuery(db=db)
+        insertCLine.prepare("INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, current_timestamp(), :cLine_id, :sign_by, 0, NULL)")
         insertCLine.bindValue(":shot_no", self.shotNo)
         insertCLine.bindValue(":cLine_id", self.nextLineId)
         insertCLine.bindValue(":sign_by", self.signBy)
+        # self.insertCLine.bindValue(":cLine_id", 6)
+        dlg = SignDialog(self)
+        if dlg.exec():
+            #print("Success! " + str(self.nextLineId))
+            if insertCLine.exec():
+                print("Inserted record")
+                self.update_queryLastCL()
+                self.update_queryWaitOK()
+            else:
+                print("NOT Inserted")
+        else:
+            print("Cancel!")
+
         #insertCLine.bindValue(":sign_by", self.shotNo)
-        # if insertCLine.exec():
-            # print("Inserted record")
-            # self.update_queryLastCL()
-            # #self.update_queryWaitOK()
-        # else:
-            # print("NOT Inserted")
 
 #    def update_filter(self, s):
 #        filter_str = 'Checklist LIKE "{}"'.format(s)
