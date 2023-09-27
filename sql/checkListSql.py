@@ -13,7 +13,7 @@ from PyQt6.QtSql import (
     #QSqlRelation,
     #QSqlRelationalDelegate,
     #QSqlRelationalTableModel,
-    QSqlTableModel,
+    #QSqlTableModel,
     QSqlQuery,
     QSqlQueryModel,
 )
