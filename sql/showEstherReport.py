@@ -35,6 +35,8 @@ from PyQt6.QtWidgets import (
     QLabel,
 )
 
+from epics import caget, caput, cainfo
+
 #basedir = os.path.dirname(__file__)
 
 # db = QSqlDatabase("QSQLITE")
@@ -42,12 +44,14 @@ from PyQt6.QtWidgets import (
 #db.open()
 
 db = QSqlDatabase("QMARIADB")
-db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
-#db.setHostName("10.136.240.213");
+#db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
+db.setHostName("10.10.136.177");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
-db.setUserName("archive");
-db.setPassword("$archive");
+# db.setUserName("archive");
+# db.setPassword("$archive");
+db.setUserName("report");
+db.setPassword("$report");
 
 db.open()
 
@@ -78,10 +82,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        self.shotNo = 180
+        self.shotNo = 177
         self.signBy = 0
         self.lastSigned = 0
-        self.tableCL = QTableView()
+        self.tableReports = QTableView()
         container = QWidget()
         layoutMain = QVBoxLayout()
         layoutTools = QHBoxLayout()
@@ -103,9 +107,11 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(refreshButt)
         layoutTools.addWidget(QLabel('Exp. Phase'))
         layoutMain.addLayout(layoutTools)
+        layoutMain.addWidget(self.tableReports)
         container.setLayout(layoutMain)
         self.setMinimumSize(QSize(1200, 800))
         self.setCentralWidget(container)
+        self.update_queryReports()
         
 
     def shot_changed(self, i):
@@ -114,6 +120,29 @@ class MainWindow(QMainWindow):
         #self.update_queryLastCL()
         #self.update_queryWaitOK()
 
+    def update_queryReports(self, s=None):
+        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
+        #print(s)
+        queryReports = QSqlQuery(db=db)
+        queryReports.prepare(
+            "SELECT shot_number, manager_id, start_time, end_time "
+            "FROM esther_reports "
+            #"INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            #"WHERE =shot_number :list_id AND DayPlan = :plan_id "
+            "WHERE shot_number  > 160 "
+            #"WHERE shot_number  = :shot_no "
+            #"ORDER BY LineOrder ASC"
+        )
+        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
+        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
+
+        queryReports.bindValue(":shot_no", self.shotNo)
+        queryReports.exec()
+        print(queryReports.lastQuery()) #  + "; Line Before: " + str(lineBefore))
+        model = QSqlQueryModel()
+        model.setQuery(queryReports)
+        self.tableReports.setModel(model)
+        self.tableReports.setColumnWidth(0,60)
 
 app = QApplication(sys.argv)
 window = MainWindow()
