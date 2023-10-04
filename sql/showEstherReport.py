@@ -7,6 +7,9 @@ PyQt6 SQL App for signed Esther Reports
 import sys
 
 from PyQt6.QtCore import QSize, Qt
+
+from PyQt6.QtGui import QFont
+
 from PyQt6.QtSql import (
     QSqlDatabase,
     #QSqlRelation,
@@ -21,20 +24,25 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QTableView,
-    QVBoxLayout,
-    QHBoxLayout,
+    QVBoxLayout, QHBoxLayout,
     QWidget,
     QDialog,
-    QDialogButtonBox,
-    QPushButton,
+    QDialogButtonBox, QPushButton,
     QCheckBox,
     QComboBox,
     QSpinBox,
     QRadioButton,
     QLabel,
+    QTableWidget, QTableWidgetItem,
 )
 
 from epics import caget, caput, cainfo
+
+# import os
+
+# os.environ['EPICS_CA_ADDR_LIST'] = '10.10.136.128'
+# os.environ['EPICS_CA_ADDR_LIST'] = 'localhost 192.168.1.110'
+# os.environ['EPICS_CA_AUTO_ADDR_LIST'] = 'NO'
 
 #basedir = os.path.dirname(__file__)
 
@@ -53,7 +61,6 @@ db.setPassword("$archive");
 # db.setPassword("$report");
 
 db.open()
-
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
@@ -105,7 +112,7 @@ class MainWindow(QMainWindow):
 #        self.list.textChanged.connect(self.update_query)
         
         shotSpin = QSpinBox()
-        shotSpin.setMinimum(170)
+        shotSpin.setMinimum(10)
         shotSpin.setMaximum(1000) # May need to change (hopefully)
 # Or: widget.setRange(-10,3)
     #widget.setPrefix("$")
@@ -123,10 +130,20 @@ class MainWindow(QMainWindow):
 
         self.tableViewReports = QTableView()
         self.tableViewReports.setModel(tableModelReports)
+        self.tableReport = QTableWidget(2,6)
+        self.tableReport.setHorizontalHeaderLabels(("O2 Bottle","He I Bottle","H2 Bottle",'He II Bottle','N2 Bottle', 'N2 Command Bottle'))
+        self.tableReport.setVerticalHeaderLabels(('Initial','Final',))
 
         layoutTools.addWidget(refreshButt)
 #        layoutTools.addWidget(QLabel('Exp. Phase'))
-        layoutTables.addWidget(self.tableReports)
+        label = QLabel('Bottle Pressures (Bar)')
+        label.setFont(QFont('Arial', 20))
+        layoutTables.addWidget(label)
+        layoutTables.addWidget(self.tableReport)
+        label = QLabel('Partial Pressures (Bar)')
+        label.setFont(QFont('Arial', 20))
+        layoutTables.addWidget(label)
+        #layoutTables.addWidget(self.tableReports)
         layoutTables.addWidget(self.tableViewReports)
 
         layoutMain.addLayout(layoutTools)
@@ -135,14 +152,54 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(1200, 800))
         self.setCentralWidget(container)
         self.update_queryReports()
+        self.update_Report()
         
 
+    def set_cell(self, qR, name, lin, col):
+        val  = qR.value(name)
+        item = QTableWidgetItem(f'{val:0.2f}')
+        self.tableReport.setItem(lin,col, item)
     def shot_changed(self, i):
         print('shot is ' + str(i))
         self.shotNo = i
         #self.update_queryLastCL()
         #self.update_queryWaitOK()
         self.update_queryReports()
+        self.update_Report()
+
+    def update_Report(self, s=None):
+        queryReport = QSqlQuery(db=db)
+        queryReport.prepare(
+            "SELECT shot_number, esther_reports.manager_id, "
+            "O2_bottle_initial, O2_bottle_final, He1_bottle_initial, He1_bottle_final, "
+            "H_bottle_initial, H_bottle_final, N2_bottle_initial, N2_bottle_final, "
+            "esther_managers.manager_name, start_time, end_time "
+            "FROM esther_reports "
+            "INNER JOIN esther_managers ON esther_reports.manager_id = esther_managers.manager_id "
+            #"WHERE shot_number  > 160 "
+            "WHERE shot_number  = :shot_no "
+        )
+
+        queryReport.bindValue(":shot_no", self.shotNo)
+        queryReport.exec()
+        if queryReport.first():
+            #val  = queryReport.value(2)
+            self.set_cell(queryReport, 'O2_bottle_initial', 0, 0)
+            self.set_cell(queryReport, 'O2_bottle_final', 1, 0)
+            val  = queryReport.value('N2_bottle_initial')
+            lastOK      = queryReport.value(1)
+            item = QTableWidgetItem(f'{val:0.2f}')
+            #item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.tableReport.setItem(0,4, item)
+            #val  = queryReport.value(3)
+            val  = queryReport.value('N2_bottle_final')
+            item = QTableWidgetItem(f'{val:0.2f}')
+            self.tableReport.setItem(1,4, item)
+        else:
+            val  = 0
+            lastLineId  = 0
+            print('No Report')
+        print(queryReport.lastQuery() + str(val))
 
     def update_queryReports(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -164,7 +221,7 @@ class MainWindow(QMainWindow):
 
         queryReports.bindValue(":shot_no", self.shotNo)
         queryReports.exec()
-        print(queryReports.lastQuery()) #  + "; Line Before: " + str(lineBefore))
+        #print(queryReports.lastQuery()) #  + "; Line Before: " + str(lineBefore))
         model = QSqlQueryModel()
         model.setQuery(queryReports)
         self.tableReports.setModel(model)
