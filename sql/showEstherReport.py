@@ -9,6 +9,7 @@ import sys
 from PyQt6.QtCore import QSize, Qt
 
 from PyQt6.QtGui import QFont
+#from PyQt6 import QtWidgets
 
 from PyQt6.QtSql import (
     QSqlDatabase,
@@ -33,7 +34,7 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QRadioButton,
     QLabel,
-    QTableWidget, QTableWidgetItem,
+    QTableWidget, QTableWidgetItem, QSizePolicy, QAbstractScrollArea
 )
 
 from epics import caget, caput, cainfo
@@ -130,20 +131,40 @@ class MainWindow(QMainWindow):
 
         self.tableViewReports = QTableView()
         self.tableViewReports.setModel(tableModelReports)
-        self.tableReport = QTableWidget(2,6)
-        self.tableReport.setHorizontalHeaderLabels(("O2 Bottle","He I Bottle","H2 Bottle",'He II Bottle','N2 Bottle', 'N2 Command Bottle'))
-        self.tableReport.setVerticalHeaderLabels(('Initial','Final',))
+
+        self.tableBottles = QTableWidget(2,6)
+        self.tableBottles.setHorizontalHeaderLabels(("O2 Bottle","He I Bottle","H2 Bottle",'He II Bottle','N2 Bottle', 'N2 Command Bottle'))
+        self.tableBottles.setVerticalHeaderLabels(('Initial','Final',))
+        #self.tableBottles.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
+        #self.tableBottles.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding) # ---
+        self.tableBottles.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum) # ---
+        #self.tableBottles.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)# +++
+
+        self.tablePartial = QTableWidget(1,6)
+        self.tablePartial.setVerticalHeaderLabels(('',))
+        self.tablePartial.setHorizontalHeaderLabels(('N2/He Purge','Oxigen','Helium I','Hidrogen','Helium II', 'Target'))
+        self.tablePartial.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.MinimumExpanding)
+
+        self.tableVolumes = QTableWidget(1,7)
+        self.tableVolumes.setVerticalHeaderLabels(('',))
+        self.tableVolumes.setHorizontalHeaderLabels(('Initial','Oxigen','Helium I','Hidrogen','Helium II', 'Total Helium'))
+        self.tableVolumes.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Minimum)
 
         layoutTools.addWidget(refreshButt)
 #        layoutTools.addWidget(QLabel('Exp. Phase'))
         label = QLabel('Bottle Pressures (Bar)')
         label.setFont(QFont('Arial', 20))
         layoutTables.addWidget(label)
-        layoutTables.addWidget(self.tableReport)
-        label = QLabel('Partial Pressures (Bar)')
+        layoutTables.addWidget(self.tableBottles)
+        label = QLabel('Partial Pressures / Bar')
         label.setFont(QFont('Arial', 20))
         layoutTables.addWidget(label)
-        #layoutTables.addWidget(self.tableReports)
+        layoutTables.addWidget(self.tablePartial)
+        label = QLabel('Partial Volumes / normalized liters')
+        label.setFont(QFont('Arial', 20))
+        layoutTables.addWidget(label)
+        layoutTables.addWidget(self.tableVolumes)
+
         layoutTables.addWidget(self.tableViewReports)
 
         layoutMain.addLayout(layoutTools)
@@ -155,10 +176,11 @@ class MainWindow(QMainWindow):
         self.update_Report()
         
 
-    def set_cell(self, qR, name, lin, col):
+    def set_table_cell(self, qR, table, name, lin, col):
         val  = qR.value(name)
         item = QTableWidgetItem(f'{val:0.2f}')
-        self.tableReport.setItem(lin,col, item)
+        table.setItem(lin,col, item)
+
     def shot_changed(self, i):
         print('shot is ' + str(i))
         self.shotNo = i
@@ -173,6 +195,7 @@ class MainWindow(QMainWindow):
             "SELECT shot_number, esther_reports.manager_id, "
             "O2_bottle_initial, O2_bottle_final, He1_bottle_initial, He1_bottle_final, "
             "H_bottle_initial, H_bottle_final, N2_bottle_initial, N2_bottle_final, "
+            "pt901_end_s1, pt901_end_o, pt901_end_he1, pt901_end_h, pt901_end_he2, pt901_target, "
             "esther_managers.manager_name, start_time, end_time "
             "FROM esther_reports "
             "INNER JOIN esther_managers ON esther_reports.manager_id = esther_managers.manager_id "
@@ -184,17 +207,19 @@ class MainWindow(QMainWindow):
         queryReport.exec()
         if queryReport.first():
             #val  = queryReport.value(2)
-            self.set_cell(queryReport, 'O2_bottle_initial', 0, 0)
-            self.set_cell(queryReport, 'O2_bottle_final', 1, 0)
-            val  = queryReport.value('N2_bottle_initial')
-            lastOK      = queryReport.value(1)
-            item = QTableWidgetItem(f'{val:0.2f}')
-            #item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.tableReport.setItem(0,4, item)
-            #val  = queryReport.value(3)
-            val  = queryReport.value('N2_bottle_final')
-            item = QTableWidgetItem(f'{val:0.2f}')
-            self.tableReport.setItem(1,4, item)
+            self.set_table_cell(queryReport, self.tableBottles, 'O2_bottle_initial', 0, 0)
+            self.set_table_cell(queryReport, self.tableBottles, 'O2_bottle_final', 1, 0)
+            self.set_table_cell(queryReport, self.tableBottles, 'He1_bottle_initial', 0, 1)
+            self.set_table_cell(queryReport, self.tableBottles, 'He1_bottle_final', 1, 1)
+            self.set_table_cell(queryReport, self.tableBottles, 'N2_bottle_initial', 0, 4)
+            self.set_table_cell(queryReport, self.tableBottles, 'N2_bottle_final', 1, 4)
+            val  = queryReport.value('')
+            # lastOK      = queryReport.value(1)
+            # item = QTableWidgetItem(f'{val:0.2f}')
+            # #item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            # self.tableBottles.setItem(0,4, item)
+            self.set_table_cell(queryReport, self.tablePartial, 'pt901_end_s1', 0, 0)
+            self.set_table_cell(queryReport, self.tablePartial, 'pt901_target', 0, 4)
         else:
             val  = 0
             lastLineId  = 0
