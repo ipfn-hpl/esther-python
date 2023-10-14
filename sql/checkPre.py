@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QCheckBox,
     QComboBox,
-    QSpinBox,
+#    QSpinBox,
     QRadioButton,
     QLabel,
 )
@@ -86,6 +86,8 @@ class MainWindow(QMainWindow):
         self.lastSigned = 0
         self.nextLineId  = 0
         self.tableCL = QTableView()
+        qryModel = QSqlQueryModel()
+        self.tableCL.setModel(qryModel)
         self.tableLastCL = QTableView()
         self.tablePreCLines = QTableView()
         self.tableWaitOK = QTableView()
@@ -100,7 +102,7 @@ class MainWindow(QMainWindow):
         #add_rec.clicked.connect(self.add_row)
 
         refreshButt = QPushButton("Refresh")
-#        refreshButt.clicked.connect(self.refresh_model)
+        refreshButt.clicked.connect(self.refresh_checkline)
 
 #        layoutTools.addWidget(add_rec)
 #        self.list = QLineEdit()
@@ -108,7 +110,9 @@ class MainWindow(QMainWindow):
 #        self.list.textChanged.connect(self.update_query)
         
         layoutTools.addWidget(refreshButt)
-        layoutTools.addWidget(QLabel('Exp. Phase'), stretch=1)
+        layoutTools.addStretch()
+        # .addSpacing(20)
+        layoutTools.addWidget(QLabel('Exp. Phase'))
         widget = QComboBox()
         widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
         widget.currentIndexChanged.connect(self.plan_changed)
@@ -118,19 +122,10 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(QLabel('Checklist:'))
         listComb = QComboBox()
         listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
-        layoutTools.addWidget(listComb, stretch=4)
+        layoutTools.addWidget(listComb)
+        # layoutTools.addWidget(listComb, stretch=4)
 
         layoutTools.addWidget(QLabel('Shot'))
-        shotSpin = QSpinBox()
-        shotSpin.setMinimum(170)
-        shotSpin.setMaximum(1000) # May need to change (hopefully)
-# Or: widget.setRange(-10,3)
-    #widget.setPrefix("$")
-#widget.setSuffix("c")
-        shotSpin.setSingleStep(1) # Or e.g. 0.5 for QDoubleSpinBox
-        shotSpin.setValue(self.shotNo)
-        layoutTools.addWidget(shotSpin)
-
 #        layoutTools.addWidget(QLabel('Filter Checklist:'))
 #        layoutTools.addWidget(self.list)
 
@@ -151,12 +146,6 @@ class MainWindow(QMainWindow):
 
 # Third Panel
 
-        #layoutTools = QHBoxLayout()
-        #checkButt = QPushButton("Check this Line")
-        #checkButt.clicked.connect(self.checkButt_clicked)
-        #layoutTools.addWidget(checkButt)
-        #layoutMain.addLayout(layoutTools)
-
         layoutTables.addWidget(self.tableCL)
         #layoutTables.addWidget(self.tableLastCL)
         layoutTables.addWidget(self.tablePreCLines)
@@ -169,11 +158,24 @@ class MainWindow(QMainWindow):
         self.update_queryLastCL()
         self.update_queryPre()
         #self.update_queryWaitOK()
-        shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
-        self.setMinimumSize(QSize(1000, 600))
+        self.setMinimumSize(QSize(1100, 600))
         self.setCentralWidget(container)
-        
+
+    def refresh_checkline(self, s):
+        indexes = self.tableCL.selectionModel().selectedRows()
+        model = self.tableCL.model()
+        for index in sorted(indexes):
+            print('Row %d is selected' % index.row())
+            #QSqlRecord
+            record = model.record(index.row())
+            field = record.field(0)
+            self.lineId = int(field.value())
+            print('Line is %d is selected' % field.value())
+
+        self.update_queryPre()
+
+    #    self.model.select()
     def plan_changed(self, i):
 #        print('plan is ' + str(i))
         self.planId = i
@@ -186,11 +188,6 @@ class MainWindow(QMainWindow):
         self.update_queryCL()
         #self.update_queryWaitOK()
 
-    def shot_changed(self, i):
-        print('shot is ' + str(i))
-        self.shotNo = i
-        self.update_queryLastCL()
-        #self.update_queryWaitOK()
 
     def update_signBy(self):
         # get the radio button the send the signal
@@ -223,35 +220,41 @@ class MainWindow(QMainWindow):
         queryCL.bindValue(":plan_id", self.planId)
         queryCL.exec()
         print("CL Query: " + queryCL.executedQuery())
-        modelCL = QSqlQueryModel()
-        modelCL.setQuery(queryCL)
-        self.tableCL.setModel(modelCL)
-        self.tableCL.setColumnWidth(0,60)
-        self.tableCL.setColumnWidth(1,100)
+        model = self.tableCL.model()
+        #modelCL = QSqlQueryModel()
+        model.setQuery(queryCL)
+        #self.tableCL.setModel(modelCL)
+        self.tableCL.setColumnWidth(0,50)
+        self.tableCL.setColumnWidth(1,80)
         self.tableCL.setColumnWidth(2,100)
-        self.tableCL.setColumnWidth(3,60)
+        self.tableCL.setColumnWidth(3,100)
         self.tableCL.setColumnWidth(4,600)
 
     def update_queryPre(self):
         #print("click ", s)
         qryPrecedence = QSqlQuery(db=db)
         qryPrecedence.prepare(
-            "SELECT Line, PrecededBy "
+            "SELECT Line, PrecededBy, ChecklistLines.Checklist, "
+            "ChecklistLines.LineOrder, ChecklistLines.LineDesc "
             "FROM CheckPrecedence "
-            "INNER JOIN ChecklistLines ON Line = ChecklistLines.CheckLineId "
+            "INNER JOIN ChecklistLines ON PrecededBy = ChecklistLines.CheckLineId "
             "WHERE Line = :list_id "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY Line ASC"
         )
-        qryPrecedence.bindValue(":list_id", '11')
+        qryPrecedence.bindValue(":list_id", self.lineId)
         #qryPrecedence.bindValue(":list_id", self.nextLineId)
-        qryPrecedence.exec()
+        if (not qryPrecedence.exec()):
+            print("Last qryCheckPrecedence: " + qryPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
+            return
+            
         modelPre = QSqlQueryModel()
         modelPre.setQuery(qryPrecedence)
         self.tablePreCLines.setModel(modelPre)
-        self.tablePreCLines.setColumnWidth(3,300)
+        self.tablePreCLines.setColumnWidth(2,80)
+        self.tablePreCLines.setColumnWidth(3,80)
+        self.tablePreCLines.setColumnWidth(4,600)
 
-        # print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
     def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
@@ -265,7 +268,7 @@ class MainWindow(QMainWindow):
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineStatusDate DESC LIMIT 4"
         )
-        queryLastCL.bindValue(":shot_no", self.shotNo)
+        #queryLastCL.bindValue(":shot_no", self.shotNo)
         queryLastCL.bindValue(":sign_by", self.signBy)
         queryLastCL.bindValue(":list_id", self.listId)
         queryLastCL.exec()
@@ -320,74 +323,12 @@ class MainWindow(QMainWindow):
         self.tableWaitOK.setColumnWidth(1,160)
         self.tableWaitOK.setColumnWidth(2,300)
 
-    def checkButt_clicked(self, s):
-        print("click ", s)
-        qryCheckPrecedence = QSqlQuery(db=db)
-        qryCheckPrecedence.prepare(
-            "SELECT Line, PrecededBy "
-            "FROM CheckPrecedence "
-            "INNER JOIN ChecklistLines ON Line = ChecklistLines.CheckLineId "
-            "WHERE Line = :list_id "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY Line ASC"
-        )
-        qryCheckSigned = QSqlQuery(db=db)
-        qryCheckSigned.prepare(
-            "SELECT CheckLine, ShotNumber, checkValue "
-            "FROM CheckLineSigned "
-            "WHERE CheckLine = :line AND ShotNumber = :shot_no"
-        )
-        
-        qryCheckPrecedence.bindValue(":list_id", self.nextLineId)
-        qryCheckPrecedence.exec()
-        # print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
-        missingSigned = False
-        while qryCheckPrecedence.next():
-            lineBefore  = qryCheckPrecedence.value(1)
-            qryCheckSigned.bindValue(":line", lineBefore)
-            qryCheckSigned.bindValue(":shot_no", self.shotNo)
-            qryCheckSigned.exec()
-            # print(qryCheckSigned.lastQuery() + "; Line Before: " + str(lineBefore))
-            if not qryCheckSigned.first():
-                print("Line Before not Signed: " + str(lineBefore))
-                missingSigned = True
-            else:
-                print("Line Signed Value: " + str(qryCheckSigned.value(2)))
-            #lastLineId  = qryCheckPrecedence.value(0)
-
-        if missingSigned:
-            dlg = QDialog(self)
-            dlg.setWindowTitle("Missing Signatures. Please Check.")
-            dlg.resize(400, 100)
-            dlg.exec()
-            return
-
-        insertCLine = QSqlQuery(db=db)
-        insertCLine.prepare("INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, current_timestamp(), :cLine_id, :sign_by, 0, NULL)")
-        insertCLine.bindValue(":shot_no", self.shotNo)
-        insertCLine.bindValue(":cLine_id", self.nextLineId)
-        insertCLine.bindValue(":sign_by", self.signBy)
-        # self.insertCLine.bindValue(":cLine_id", 6)
-        dlg = SignDialog(self)
-        if dlg.exec():
-            #print("Success! " + str(self.nextLineId))
-            if insertCLine.exec():
-                print("Inserted record")
-                self.update_queryLastCL()
-                self.update_queryWaitOK()
-            else:
-                print("NOT Inserted")
-        else:
-            print("Cancel!")
-
 
 #    def update_filter(self, s):
 #        filter_str = 'Checklist LIKE "{}"'.format(s)
 #        self.model.setFilter(filter_str)
 
 #        self.model.setFilter(filter_str)
-    #def refresh_model(self, s):
-    #    self.model.select()
 
 app = QApplication(sys.argv)
 window = MainWindow()
