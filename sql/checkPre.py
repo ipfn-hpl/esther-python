@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self.signBy = 0
         self.shotNo = 180
         self.lastSigned = 0
+        self.currentRecordRow  = 0
         self.nextLineId  = 0
         self.tableCL = QTableView()
         qryModel = QSqlQueryModel()
@@ -104,12 +105,16 @@ class MainWindow(QMainWindow):
         refreshButt = QPushButton("Refresh")
         refreshButt.clicked.connect(self.refresh_checkline)
 
+        nextButt = QPushButton("Next Line")
+        nextButt.clicked.connect(self.next_checkline)
+
 #        layoutTools.addWidget(add_rec)
 #        self.list = QLineEdit()
 #        self.list.setPlaceholderText("1")
 #        self.list.textChanged.connect(self.update_query)
         
         layoutTools.addWidget(refreshButt)
+        layoutTools.addWidget(nextButt)
         layoutTools.addStretch()
         # .addSpacing(20)
         layoutTools.addWidget(QLabel('Exp. Phase'))
@@ -162,12 +167,22 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(1100, 600))
         self.setCentralWidget(container)
 
-    def refresh_checkline(self, s):
+    def next_checkline(self, s):
+        self.currentRecordRow  = self.currentRecordRow + 1
+        model = self.tableCL.model()
+        record = model.record(self.currentRecordRow)
+        field = record.field(0)
+        self.lineId = int(field.value())
+
+        self.update_queryPre()
+
+    def refresh_checkline(self):
         indexes = self.tableCL.selectionModel().selectedRows()
         model = self.tableCL.model()
         for index in sorted(indexes):
             print('Row %d is selected' % index.row())
             #QSqlRecord
+            self.currentRecordRow  = index.row()
             record = model.record(index.row())
             field = record.field(0)
             self.lineId = int(field.value())
@@ -245,7 +260,7 @@ class MainWindow(QMainWindow):
         qryPrecedence.bindValue(":list_id", self.lineId)
         #qryPrecedence.bindValue(":list_id", self.nextLineId)
         if (not qryPrecedence.exec()):
-            print("Last qryCheckPrecedence: " + qryPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
+            print("Last qryCheckPrecedence: " + qryPrecedence.executedQuery() + ' list_id: ' )
             return
             
         modelPre = QSqlQueryModel()
