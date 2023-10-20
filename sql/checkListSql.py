@@ -42,8 +42,8 @@ from PyQt6.QtWidgets import (
 #db.open()
 
 db = QSqlDatabase("QMARIADB")
-db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
-#db.setHostName("10.136.240.213");
+#db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
+db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
 db.setUserName("archive");
@@ -84,7 +84,23 @@ class MainWindow(QMainWindow):
         self.lastSigned = 0
         self.nextLineId  = 0
         self.tableCL = QTableView()
+        qryModel = QSqlQueryModel()
+        self.tableCL.setModel(qryModel)
+
         self.tableLastCL = QTableView()
+        qryModel = QSqlQueryModel()
+        query = QSqlQuery(db=db)
+        query.prepare(
+            "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLineSigned.SignedBy, EstherRoles.RoleName "
+            "FROM CheckLineSigned "
+            "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
+            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+            "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY LineStatusDate DESC LIMIT 4"
+        )
+        qryModel.setQuery(query)
+        self.tableLastCL.setModel(qryModel)
         self.tableWaitOK = QTableView()
         container = QWidget()
         layoutMain = QVBoxLayout()
@@ -183,6 +199,7 @@ class MainWindow(QMainWindow):
         print('list is ' + str(i))
         self.listId = i
         self.update_queryCL()
+        self.update_queryLastCL()
         self.update_queryWaitOK()
 
     def shot_changed(self, i):
@@ -196,7 +213,7 @@ class MainWindow(QMainWindow):
         rb = self.sender()
         # check if the radio button is checked
         if rb.isChecked():
-            print("sign is %s" % (rb.sign))
+            print("signBy is %s" % (rb.sign))
             self.signBy = rb.sign
             self.update_queryLastCL()
             self.update_queryWaitOK()
@@ -233,6 +250,8 @@ class MainWindow(QMainWindow):
     def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
+        model = self.tableLastCL.model()
+        query = model.query()
         queryLastCL = QSqlQuery(db=db)
         queryLastCL.prepare(
             "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLineSigned.SignedBy, EstherRoles.RoleName "
@@ -246,11 +265,17 @@ class MainWindow(QMainWindow):
         queryLastCL.bindValue(":shot_no", self.shotNo)
         queryLastCL.bindValue(":sign_by", self.signBy)
         queryLastCL.bindValue(":list_id", self.listId)
-        queryLastCL.exec()
-        #print("Last CL Query: " + queryLastCL.executedQuery() + " signBy: " + str(self.signBy))
-        modelLastCL = QSqlQueryModel()
-        modelLastCL.setQuery(queryLastCL)
-        self.tableLastCL.setModel(modelLastCL)
+        query.bindValue(":shot_no", self.shotNo)
+        query.bindValue(":sign_by", self.signBy)
+        query.bindValue(":list_id", self.listId)
+        #if (not queryLastCL.exec()):
+        if (not query.exec()):
+            print("Last CL Query: " + query.executedQuery() + " signBy: " + str(self.signBy))
+            return
+        print("LastCL Query: " + query.executedQuery() + " signBy: " + str(self.signBy))
+        #modelLastCL = QSqlQueryModel()
+        #self.tableLastCL.setModel(modelLastCL)
+        #model.setQuery(queryLastCL)
         self.tableLastCL.setColumnWidth(3,300)
         #self.tableLastCL.sortByColumn(1,Qt.SortOrder.AscendingOrder)
         #self.tableLastCL.setSortingEnabled(True)

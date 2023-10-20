@@ -53,6 +53,7 @@ from epics import caget, caput, cainfo
 
 db = QSqlDatabase("QMARIADB")
 db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
+db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
 #db.setHostName("10.10.136.177");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
