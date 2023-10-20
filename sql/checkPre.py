@@ -42,7 +42,8 @@ from PyQt6.QtWidgets import (
 #db.open()
 
 db = QSqlDatabase("QMARIADB")
-db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
+#db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
+db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
 #db.setHostName("10.136.240.213");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
