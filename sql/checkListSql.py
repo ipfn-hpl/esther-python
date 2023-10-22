@@ -8,6 +8,7 @@ import sys
 
 from PyQt6.QtCore import QSize, Qt
 # from PyQt6.QtSql import QSqlDatabase, QSqlTableModel
+from PyQt6.QtGui import QFont
 from PyQt6.QtSql import (
     QSqlDatabase,
     #QSqlRelation,
@@ -27,9 +28,10 @@ from PyQt6.QtWidgets import (
     QWidget,
     QDialog,
     QDialogButtonBox,
-    QPushButton,
     QCheckBox,
     QComboBox,
+    QMessageBox,
+    QPushButton,
     QSpinBox,
     QRadioButton,
     QTabWidget,
@@ -89,6 +91,7 @@ class MainWindow(QMainWindow):
         
         self.listId = 0
         self.planId = 1
+        self.shotNo = 180
         self.signBy = 0
         self.lastSigned = 0
         self.nextLineId  = 0
@@ -112,13 +115,46 @@ class MainWindow(QMainWindow):
         self.tableLastCL.setModel(qryModel)
         self.tableWaitOK = QTableView()
         container = QWidget()
+
+        #layoutMain.addLayout(layoutTools)
+        
+        #self.table = QTableView()
+        #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
+        #self.model.removeColumns(0,1)
+        #self.model.select()
+        #self.queryLastCL.exec()
+
+# Third Panel
+
+        layoutTables = QVBoxLayout()
+        self.tabs = QTabWidget()
+        query = QSqlQuery(db=db)
+        for n, lst in enumerate(LIST_NAMES):
+            query.prepare(CHECK_LIST_QUERY)
+            query.bindValue(":list_id", n)
+            query.bindValue(":plan_id", self.planId)
+            query.exec()
+            qryModel = QSqlQueryModel()
+            qryModel.setQuery(query)
+            tableVw = QTableView()
+            tableVw.setModel(qryModel)
+            self.tabs.addTab(tableVw, lst)
+#            self.tabs.addTab(self.tableCL, lst)
+        #layoutTables.addWidget(self.tableCL)
+        self.tabs.currentChanged.connect(self.list_changed)
+        layoutTables.addWidget(self.tabs, stretch=2)
+        label = QLabel('Checked Lines on this Shot')
+        label.setFont(QFont('Arial', 20))
+        layoutTables.addWidget(label)
+
+        layoutTables.addWidget(self.tableLastCL)
+
+        label = QLabel('Next Lines')
+        label.setFont(QFont('Arial', 20))
+        layoutTables.addWidget(label)
+        layoutTables.addWidget(self.tableWaitOK)
+
         layoutTools = QVBoxLayout()
-
-        self.search = QLineEdit()
-#        self.search.textChanged.connect(self.update_filter)
-
-        #add_rec = QPushButton("Add record")
-        #add_rec.clicked.connect(self.add_row)
 
         refreshButt = QPushButton("Refresh")
 #        refreshButt.clicked.connect(self.refresh_model)
@@ -136,10 +172,10 @@ class MainWindow(QMainWindow):
         widget.setCurrentIndex(self.planId)
         layoutTools.addWidget(widget)
 
-        layoutTools.addWidget(QLabel('Checklist:'))
-        listComb = QComboBox()
-        listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
-        layoutTools.addWidget(listComb)
+        #layoutTools.addWidget(QLabel('Checklist:'))
+        #listComb = QComboBox()
+        #listComb.addItems(["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"])
+#        layoutTools.addWidget(listComb)
 
         layoutTools.addWidget(QLabel('Shot'))
         shotSpin = QSpinBox()
@@ -149,13 +185,14 @@ class MainWindow(QMainWindow):
     #widget.setPrefix("$")
 #widget.setSuffix("c")
         shotSpin.setSingleStep(1) # Or e.g. 0.5 for QDoubleSpinBox
-        self.shotNo = 180
         shotSpin.setValue(self.shotNo)
         layoutTools.addWidget(shotSpin)
 
 #        layoutTools.addWidget(QLabel('Filter Checklist:'))
 #        layoutTools.addWidget(self.list)
 
+        layoutTools.addStretch()
+        # .addSpacing(20)
         layoutTools.addWidget(QLabel('Checked By: '))
         radiobutton = QRadioButton('ChiefEngineer', self)
         radiobutton.setChecked(True)
@@ -167,59 +204,24 @@ class MainWindow(QMainWindow):
         radiobutton.sign = 1
         radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
-
-        #layoutMain.addLayout(layoutTools)
-        
-        #self.table = QTableView()
-        #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
-        #self.model.removeColumns(0,1)
-        #self.model.select()
-        #self.queryLastCL.exec()
-
-# Third Panel
+        checkButt = QPushButton("Check Next Line")
+        checkButt.clicked.connect(self.checkButt_clicked)
+        layoutTools.addWidget(checkButt)
 
         layoutMain = QHBoxLayout()
+
         layoutMain.addLayout(layoutTools)
 
-        layoutTables = QVBoxLayout()
-        self.tabs = QTabWidget()
-        for n, lst in enumerate(LIST_NAMES):
-            """
-            ["Master", "Combustion Driver",
-                                 "Vacuum","Test Gases (CT, ST)",
-                                 "Shock Detection System","Optical Diagnostics",
-                                 "Microwave Diagnostics"]):
-            """
-            query = QSqlQuery(db=db)
-            query.prepare(CHECK_LIST_QUERY)
-            query.bindValue(":list_id", n)
-            query.bindValue(":plan_id", self.planId)
-            query.exec()
-            qryModel = QSqlQueryModel()
-            qryModel.setQuery(query)
-            tableVw = QTableView()
-            tableVw.setModel(qryModel)
-            self.tabs.addTab(tableVw, lst)
-#            self.tabs.addTab(self.tableCL, lst)
-        #layoutTables.addWidget(self.tableCL)
-        layoutTables.addWidget(self.tabs)
-        layoutTables.addWidget(self.tableLastCL)
-
-        checkButt = QPushButton("Check this Line")
-        checkButt.clicked.connect(self.checkButt_clicked)
-        layoutTables.addWidget(checkButt)
-
-        layoutTables.addWidget(self.tableWaitOK)
         layoutMain.addLayout(layoutTables)
         container.setLayout(layoutMain)
 
-        self.update_queryCL()
+#        self.update_queryCL()
         self.update_queryLastCL()
         self.update_queryWaitOK()
         
         self.update_ChkLists()
         shotSpin.valueChanged.connect(self.shot_changed)
-        listComb.currentIndexChanged.connect(self.list_changed)
+        #listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1200, 800))
         self.setCentralWidget(container)
         
@@ -227,18 +229,20 @@ class MainWindow(QMainWindow):
 #        print('plan is ' + str(i))
         self.planId = i
         #self.update_queryCL()
+        self.update_ChkLists()
+        self.update_queryLastCL()
         self.update_queryWaitOK()
 
     def list_changed(self, i):
         print('list is ' + str(i))
         self.listId = i
-        self.update_queryCL()
+        #self.update_queryCL()
         self.update_ChkLists()
         self.update_queryLastCL()
         self.update_queryWaitOK()
 
     def shot_changed(self, i):
-        print('shot is ' + str(i))
+        print('Shot is ' + str(i))
         self.shotNo = i
         self.update_queryLastCL()
         self.update_queryWaitOK()
@@ -250,6 +254,7 @@ class MainWindow(QMainWindow):
         if rb.isChecked():
             print("signBy is %s" % (rb.sign))
             self.signBy = rb.sign
+            self.update_ChkLists()
             self.update_queryLastCL()
             self.update_queryWaitOK()
             #self.result_label.setText(f'You selected {rb.text()}')
@@ -267,34 +272,6 @@ class MainWindow(QMainWindow):
             #return
             #query.exec()
             model.setQuery(query)
-
-    def update_queryCL(self, s=None):
-        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
-        #print(s)
-        queryCL = QSqlQuery(db=db)
-        queryCL.prepare(
-            "SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
-            "LineOrder, LineDesc FROM ChecklistLines "
-            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-            "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
-            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
-            "ORDER BY LineOrder ASC"
-        )
-        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
-        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
-
-        queryCL.bindValue(":list_id", self.listId)
-        queryCL.bindValue(":plan_id", self.planId)
-        queryCL.exec()
-        modelCL = QSqlQueryModel()
-        modelCL.setQuery(queryCL)
-        self.tableCL.setModel(modelCL)
-        self.tableCL.setColumnWidth(0,60)
-        self.tableCL.setColumnWidth(1,100)
-        self.tableCL.setColumnWidth(2,100)
-        self.tableCL.setColumnWidth(3,60)
-        self.tableCL.setColumnWidth(4,600)
 
     def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -383,6 +360,7 @@ class MainWindow(QMainWindow):
         qryCheckPrecedence.exec()
         # print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
         missingSigned = False
+        lines_not_found = ""
         while qryCheckPrecedence.next():
             lineBefore  = qryCheckPrecedence.value(1)
             qryCheckSigned.bindValue(":line", lineBefore)
@@ -391,6 +369,7 @@ class MainWindow(QMainWindow):
             # print(qryCheckSigned.lastQuery() + "; Line Before: " + str(lineBefore))
             if not qryCheckSigned.first():
                 print("Line Before not Signed: " + str(lineBefore))
+                lines_not_found = lines_not_found + f'<p> not Signed: {lineBefore} </p>'
                 missingSigned = True
             else:
                 print("Line Signed Value: " + str(qryCheckSigned.value(2)))
@@ -401,6 +380,9 @@ class MainWindow(QMainWindow):
             dlg.setWindowTitle("Missing Signatures. Please Check.")
             dlg.resize(400, 100)
             dlg.exec()
+            QMessageBox.critical(None, "Error",
+                f"""<p>The following tables are missing
+                from the database: {lines_not_found}</p>""")
             return
 
         insertCLine = QSqlQuery(db=db)
@@ -437,3 +419,34 @@ window.show()
 app.exec()
 
 # vim: syntax=python ts=4 sw=4 sts=4 sr et
+
+"""
+    def update_queryCL(self, s=None):
+        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
+        #print(s)
+        queryCL = QSqlQuery(db=db)
+        queryCL.prepare(
+            "SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
+            "LineOrder, LineDesc FROM ChecklistLines "
+            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
+            "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
+            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
+            "ORDER BY LineOrder ASC"
+        )
+        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
+        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
+
+        queryCL.bindValue(":list_id", self.listId)
+        queryCL.bindValue(":plan_id", self.planId)
+        queryCL.exec()
+        modelCL = QSqlQueryModel()
+        modelCL.setQuery(queryCL)
+        self.tableCL.setModel(modelCL)
+        self.tableCL.setColumnWidth(0,60)
+        self.tableCL.setColumnWidth(1,100)
+        self.tableCL.setColumnWidth(2,100)
+        self.tableCL.setColumnWidth(3,60)
+        self.tableCL.setColumnWidth(4,600)
+
+"""
