@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QSpinBox,
     QRadioButton,
+    QTabWidget,
     QLabel,
 )
 
@@ -40,7 +41,15 @@ from PyQt6.QtWidgets import (
 # db = QSqlDatabase("QSQLITE")
 #db.setDatabaseName(os.path.join(basedir, "chinook.sqlite"))
 #db.open()
-
+CHECK_LIST_QUERY = ("SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
+            "LineOrder, LineDesc FROM ChecklistLines "
+            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
+            "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
+            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
+            "ORDER BY LineOrder ASC"
+        )
+LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
 db = QSqlDatabase("QMARIADB")
 #db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
 db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
@@ -103,8 +112,7 @@ class MainWindow(QMainWindow):
         self.tableLastCL.setModel(qryModel)
         self.tableWaitOK = QTableView()
         container = QWidget()
-        layoutMain = QVBoxLayout()
-        layoutTools = QHBoxLayout()
+        layoutTools = QVBoxLayout()
 
         self.search = QLineEdit()
 #        self.search.textChanged.connect(self.update_filter)
@@ -160,9 +168,7 @@ class MainWindow(QMainWindow):
         radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
 
-        layoutMain.addLayout(layoutTools)
-        layoutMain.addWidget(self.tableCL)
-        layoutMain.addWidget(self.tableLastCL)
+        #layoutMain.addLayout(layoutTools)
         
         #self.table = QTableView()
         #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
@@ -172,18 +178,46 @@ class MainWindow(QMainWindow):
 
 # Third Panel
 
-        layoutTools = QHBoxLayout()
-        checkButt = QPushButton("Check this Line")
-        checkButt.clicked.connect(self.checkButt_clicked)
-        layoutTools.addWidget(checkButt)
+        layoutMain = QHBoxLayout()
         layoutMain.addLayout(layoutTools)
 
-        layoutMain.addWidget(self.tableWaitOK)
+        layoutTables = QVBoxLayout()
+        self.tabs = QTabWidget()
+        for n, lst in enumerate(LIST_NAMES):
+            """
+            ["Master", "Combustion Driver",
+                                 "Vacuum","Test Gases (CT, ST)",
+                                 "Shock Detection System","Optical Diagnostics",
+                                 "Microwave Diagnostics"]):
+            """
+            query = QSqlQuery(db=db)
+            query.prepare(CHECK_LIST_QUERY)
+            query.bindValue(":list_id", n)
+            query.bindValue(":plan_id", self.planId)
+            query.exec()
+            qryModel = QSqlQueryModel()
+            qryModel.setQuery(query)
+            tableVw = QTableView()
+            tableVw.setModel(qryModel)
+            self.tabs.addTab(tableVw, lst)
+#            self.tabs.addTab(self.tableCL, lst)
+        #layoutTables.addWidget(self.tableCL)
+        layoutTables.addWidget(self.tabs)
+        layoutTables.addWidget(self.tableLastCL)
+
+        checkButt = QPushButton("Check this Line")
+        checkButt.clicked.connect(self.checkButt_clicked)
+        layoutTables.addWidget(checkButt)
+
+        layoutTables.addWidget(self.tableWaitOK)
+        layoutMain.addLayout(layoutTables)
         container.setLayout(layoutMain)
 
         self.update_queryCL()
         self.update_queryLastCL()
         self.update_queryWaitOK()
+        
+        self.update_ChkLists()
         shotSpin.valueChanged.connect(self.shot_changed)
         listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1200, 800))
@@ -192,13 +226,14 @@ class MainWindow(QMainWindow):
     def plan_changed(self, i):
 #        print('plan is ' + str(i))
         self.planId = i
-        self.update_queryCL()
+        #self.update_queryCL()
         self.update_queryWaitOK()
 
     def list_changed(self, i):
         print('list is ' + str(i))
         self.listId = i
         self.update_queryCL()
+        self.update_ChkLists()
         self.update_queryLastCL()
         self.update_queryWaitOK()
 
@@ -218,6 +253,20 @@ class MainWindow(QMainWindow):
             self.update_queryLastCL()
             self.update_queryWaitOK()
             #self.result_label.setText(f'You selected {rb.text()}')
+
+    def update_ChkLists(self):
+        print('count is ' + str(self.tabs.count()))
+        for i in range(self.tabs.count()):
+            tableVw = self.tabs.widget(i)
+            model = tableVw.model()
+            query = model.query()
+            query.bindValue(":plan_id", self.planId)
+            query.bindValue(":list_id", i)
+            if (not query.exec()):
+                print("CL Query i: " + str(i) + query.executedQuery() + " signBy: " + str(self.signBy))
+            #return
+            #query.exec()
+            model.setQuery(query)
 
     def update_queryCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -252,19 +301,6 @@ class MainWindow(QMainWindow):
         #print(s)
         model = self.tableLastCL.model()
         query = model.query()
-        queryLastCL = QSqlQuery(db=db)
-        queryLastCL.prepare(
-            "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLineSigned.SignedBy, EstherRoles.RoleName "
-            "FROM CheckLineSigned "
-            "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
-            "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineStatusDate DESC LIMIT 4"
-        )
-        queryLastCL.bindValue(":shot_no", self.shotNo)
-        queryLastCL.bindValue(":sign_by", self.signBy)
-        queryLastCL.bindValue(":list_id", self.listId)
         query.bindValue(":shot_no", self.shotNo)
         query.bindValue(":sign_by", self.signBy)
         query.bindValue(":list_id", self.listId)
@@ -272,27 +308,29 @@ class MainWindow(QMainWindow):
         if (not query.exec()):
             print("Last CL Query: " + query.executedQuery() + " signBy: " + str(self.signBy))
             return
-        print("LastCL Query: " + query.executedQuery() + " signBy: " + str(self.signBy))
-        #modelLastCL = QSqlQueryModel()
-        #self.tableLastCL.setModel(modelLastCL)
-        #model.setQuery(queryLastCL)
+        print("LastCL Query: " + query.executedQuery())
+        print(":shot_no", str(self.shotNo)  + " signBy: " + str(self.signBy))
+        # QSqlQueryModel::setQuery() is a member of the model, QSqlQueryModel::query().exec() 
+        # is just a method on the query. So the model knows about the former and refreshes, 
+        # but does not know you're doing the latter.
+        model.setQuery(query)
         self.tableLastCL.setColumnWidth(3,300)
         #self.tableLastCL.sortByColumn(1,Qt.SortOrder.AscendingOrder)
         #self.tableLastCL.setSortingEnabled(True)
 
         #while self.queryLastCL.next():
         #    lastOK  = self.queryLastCL.value(0)
-        if queryLastCL.first():
-            lastLineId  = queryLastCL.value(0)
-            lastOK      = queryLastCL.value(1)
-        else:
-            lastOK  = 0
-            lastLineId  = 0
+        if query.first():
+            self.lastSignedLineId = query.value(0)
+            self.lastSigned = query.value(1)
+        #else:
+        #    lastOK  = 0
+        #    lastLineId  = 0
         #print(self.queryLastCL.lastQuery())
         #self.update_queryLastCL()
-        self.lastSigned = lastOK
-        self.lastSignedId = lastLineId
-        print("lastOrder: " + str(lastOK)+ ", lastLineId: " + str(lastLineId))
+        #elf.lastSigned = lastOK
+        #self.lastSignedId = lastLineId
+        print("lastOrder: " + str(self.lastSigned)+ ", lastLineId: " + str(self.lastSignedLineId))
 
     def update_queryWaitOK(self):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
