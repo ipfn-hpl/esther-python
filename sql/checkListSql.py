@@ -6,7 +6,7 @@ PyQt6 SQL App for signed Esther Checklists
 #import os
 import sys
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, QSortFilterProxyModel
 # from PyQt6.QtSql import QSqlDatabase, QSqlTableModel
 from PyQt6.QtGui import QFont
 from PyQt6.QtSql import (
@@ -58,7 +58,7 @@ CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusD
             "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
             "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineStatusDate ASC LIMIT 4")
+            "ORDER BY LineStatusDate DESC LIMIT 4")
 
 CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
             "FROM ChecklistLines "
@@ -115,12 +115,11 @@ class MainWindow(QMainWindow):
         self.tableCL.setModel(qryModel)
 
         self.tableLastCL = QTableView()
-        qryModel = QSqlQueryModel()
+        """
         query = QSqlQuery(db=db)
         query.prepare(CHECKLINE_LAST_QUERY)
-        qryModel.setQuery(query)
         self.tableLastCL.setModel(qryModel)
-
+        """
         query = QSqlQuery(db=db)
         query.prepare(CHECK_WAITING_LIST_QUERY)
         model = QSqlQueryModel()
@@ -153,7 +152,7 @@ class MainWindow(QMainWindow):
 #            self.tabs.addTab(self.tableCL, lst)
         #layoutTables.addWidget(self.tableCL)
         self.tabs.currentChanged.connect(self.list_changed)
-        layoutTables.addWidget(self.tabs, stretch=2)
+        layoutTables.addWidget(self.tabs, stretch=3)
         label = QLabel('Checked Lines on this Shot')
         label.setFont(QFont('Arial', 20))
         layoutTables.addWidget(label)
@@ -281,15 +280,20 @@ class MainWindow(QMainWindow):
             if (not query.exec()):
                 print("NOT exec(). CL Query i: " + str(i) + query.executedQuery() + " signBy: " + str(self.signBy))
             #return
-            #query.exec()
             model.setQuery(query)
+            tableVw.setAlternatingRowColors(True)
             tableVw.setColumnWidth(4,300)
 
     def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        model = self.tableLastCL.model()
-        query = model.query()
+        #model = self.tableLastCL.model()
+        #query = model.query()
+        model = QSqlQueryModel()
+        query = QSqlQuery(db=db)
+        query.prepare(CHECKLINE_LAST_QUERY)
+        #qryModel.setQuery(query)
+        #self.tableLastCL.setModel(qryModel)
         query.bindValue(":shot_no", self.shotNo)
         query.bindValue(":sign_by", self.signBy)
         query.bindValue(":list_id", self.listId)
@@ -303,9 +307,18 @@ class MainWindow(QMainWindow):
         # is just a method on the query. So the model knows about the former and refreshes, 
         # but does not know you're doing the latter.
         model.setQuery(query)
-        self.tableLastCL.setColumnWidth(3, 300)
-        #self.tableLastCL.sortByColumn(1,Qt.SortOrder.AscendingOrder)
-        #self.tableLastCL.setSortingEnabled(True)
+# https://forum.qt.io/topic/13658/qsqltablemodel-qtableview-how-to-sort-by-column/2
+
+        proxyModel = QSortFilterProxyModel(model)
+        proxyModel.setSourceModel(model)
+        self.tableLastCL.setModel(proxyModel)
+        self.tableLastCL.sortByColumn(1,Qt.SortOrder.AscendingOrder)
+        self.tableLastCL.setSortingEnabled(True)
+        #self.tableLastCL.reset()
+        #self.tableLastCL.show()
+        self.tableLastCL.setColumnWidth(3, 400)
+        #self.tableLastCL.resizeColumnsToContents()
+        self.tableLastCL.setAlternatingRowColors(True)
 
         #while self.queryLastCL.next():
         #    lastOK  = self.queryLastCL.value(0)
@@ -354,17 +367,19 @@ class MainWindow(QMainWindow):
         self.tableWaitOK.setColumnWidth(1,160)
         self.tableWaitOK.setColumnWidth(2,300)
 
-    def checkButt_clicked(self, s):
-        print("click ", s)
+    def checkButt_clicked(self):
+        #print("click ", s)
         qryCheckPrecedence = QSqlQuery(db=db)
         qryCheckPrecedence.prepare(
             "SELECT Line, PrecededBy "
             "FROM CheckPrecedence "
             "INNER JOIN ChecklistLines ON Line = ChecklistLines.CheckLineId "
-            "WHERE Line = :list_id "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "WHERE Line = :line_id "
             "ORDER BY Line ASC"
         )
+        qryCheckPrecedence.bindValue(":line_id", self.nextLineId)
+        qryCheckPrecedence.exec()
+
         qryCheckSigned = QSqlQuery(db=db)
         qryCheckSigned.prepare(
             "SELECT CheckLine, ShotNumber, checkValue "
@@ -372,8 +387,6 @@ class MainWindow(QMainWindow):
             "WHERE CheckLine = :line AND ShotNumber = :shot_no"
         )
         
-        qryCheckPrecedence.bindValue(":list_id", self.nextLineId)
-        qryCheckPrecedence.exec()
         # print("Last qryCheckPrecedence: " + qryCheckPrecedence.executedQuery() + ' list_id: ' + str(self.nextLineId))
         missingSigned = False
         lines_not_found = ""
@@ -394,15 +407,17 @@ class MainWindow(QMainWindow):
         if missingSigned:
             dlg = QDialog(self)
             dlg.setWindowTitle("Missing Signatures. Please Check.")
+            print("Missing Signatures. Please Check.")
             dlg.resize(400, 100)
-            dlg.exec()
+            #dlg.exec()
             QMessageBox.critical(None, "Error",
-                f"""<p>The following tables are missing
-                from the database: {lines_not_found}</p>""")
+                f"""<p>The following checklines are missing
+                </p> {lines_not_found}""")
             return
 
         insertCLine = QSqlQuery(db=db)
-        insertCLine.prepare("INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, current_timestamp(), :cLine_id, :sign_by, 0, NULL)")
+        insertCLine.prepare("INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, "
+                "current_timestamp(), :cLine_id, :sign_by, 0, NULL)")
         insertCLine.bindValue(":shot_no", self.shotNo)
         insertCLine.bindValue(":cLine_id", self.nextLineId)
         insertCLine.bindValue(":sign_by", self.signBy)
@@ -415,7 +430,9 @@ class MainWindow(QMainWindow):
                 self.update_queryLastCL()
                 self.update_queryWaitOK()
             else:
-                print("NOT Inserted")
+                #print("NOT Inserted")
+                print("Insert failed: " + insertCLine.lastQuery())
+                print(f":shot_no + {self.shotNo} :cLine_id {self.nextLineId} :sign_by {self.signBy}")
         else:
             print("Cancel!")
 
