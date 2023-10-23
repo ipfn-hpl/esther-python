@@ -51,6 +51,21 @@ CHECK_LIST_QUERY = ("SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
             "WHERE Checklist = :list_id AND DayPlan = :plan_id "
             "ORDER BY LineOrder ASC"
         )
+
+CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLineSigned.SignedBy, EstherRoles.RoleName "
+            "FROM CheckLineSigned "
+            "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
+            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+            "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY LineStatusDate ASC LIMIT 4")
+
+CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
+            "FROM ChecklistLines "
+            "WHERE LineOrder > :l_order AND Checklist = :list_id AND SignedBy = :sign_by "
+            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+            "ORDER BY LineOrder ASC LIMIT 3")
+
 LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
 db = QSqlDatabase("QMARIADB")
 #db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
@@ -102,23 +117,19 @@ class MainWindow(QMainWindow):
         self.tableLastCL = QTableView()
         qryModel = QSqlQueryModel()
         query = QSqlQuery(db=db)
-        query.prepare(
-            "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLineSigned.SignedBy, EstherRoles.RoleName "
-            "FROM CheckLineSigned "
-            "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
-            "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineStatusDate DESC LIMIT 4"
-        )
+        query.prepare(CHECKLINE_LAST_QUERY)
         qryModel.setQuery(query)
         self.tableLastCL.setModel(qryModel)
+
+        query = QSqlQuery(db=db)
+        query.prepare(CHECK_WAITING_LIST_QUERY)
+        model = QSqlQueryModel()
+        model.setQuery(query)
         self.tableWaitOK = QTableView()
+        self.tableWaitOK.setModel(model)
+
         container = QWidget()
 
-        #layoutMain.addLayout(layoutTools)
-        
-        #self.table = QTableView()
         #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
         #self.model.removeColumns(0,1)
         #self.model.select()
@@ -254,7 +265,7 @@ class MainWindow(QMainWindow):
         if rb.isChecked():
             print("signBy is %s" % (rb.sign))
             self.signBy = rb.sign
-            self.update_ChkLists()
+            #self.update_ChkLists()
             self.update_queryLastCL()
             self.update_queryWaitOK()
             #self.result_label.setText(f'You selected {rb.text()}')
@@ -268,10 +279,11 @@ class MainWindow(QMainWindow):
             query.bindValue(":plan_id", self.planId)
             query.bindValue(":list_id", i)
             if (not query.exec()):
-                print("CL Query i: " + str(i) + query.executedQuery() + " signBy: " + str(self.signBy))
+                print("NOT exec(). CL Query i: " + str(i) + query.executedQuery() + " signBy: " + str(self.signBy))
             #return
             #query.exec()
             model.setQuery(query)
+            tableVw.setColumnWidth(4,300)
 
     def update_queryLastCL(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -291,28 +303,32 @@ class MainWindow(QMainWindow):
         # is just a method on the query. So the model knows about the former and refreshes, 
         # but does not know you're doing the latter.
         model.setQuery(query)
-        self.tableLastCL.setColumnWidth(3,300)
+        self.tableLastCL.setColumnWidth(3, 300)
         #self.tableLastCL.sortByColumn(1,Qt.SortOrder.AscendingOrder)
         #self.tableLastCL.setSortingEnabled(True)
 
         #while self.queryLastCL.next():
         #    lastOK  = self.queryLastCL.value(0)
         if query.first():
-            self.lastSignedLineId = query.value(0)
+#            self.lastSignedLineId = query.value(0)
             self.lastSigned = query.value(1)
-        #else:
+            print("lastOrder: " + str(self.lastSigned)) # + ", lastLineId: " + str(self.lastSignedLineId))
+        else:
+            self.lastSigned = 0
         #    lastOK  = 0
         #    lastLineId  = 0
         #print(self.queryLastCL.lastQuery())
         #self.update_queryLastCL()
         #elf.lastSigned = lastOK
         #self.lastSignedId = lastLineId
-        print("lastOrder: " + str(self.lastSigned)+ ", lastLineId: " + str(self.lastSignedLineId))
 
     def update_queryWaitOK(self):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
         #print(s)
-        queryWaitOK = QSqlQuery(db=db)
+        model = self.tableWaitOK.model()
+        query = model.query()
+        # queryWaitOK = QSqlQuery(db=db)
+        """
         queryWaitOK.prepare(
             "SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
             "FROM ChecklistLines "
@@ -321,19 +337,19 @@ class MainWindow(QMainWindow):
             "ORDER BY LineOrder ASC LIMIT 3"
         )
         #queryWaitOK.bindValue(":l_order", lastOK)
+        """
 
-        queryWaitOK.bindValue(":l_order", self.lastSigned)
-        queryWaitOK.bindValue(":list_id", self.listId)
-        queryWaitOK.bindValue(":sign_by", self.signBy)
-        queryWaitOK.exec()
-        if queryWaitOK.first():
-            self.nextLineId  = queryWaitOK.value(0)
+        query.bindValue(":l_order", self.lastSigned)
+        query.bindValue(":list_id", self.listId)
+        query.bindValue(":sign_by", self.signBy)
+        query.exec()
+        if query.first():
+            self.nextLineId  = query.value(0)
         else:
             self.nextLineId  = 0
         # print("Wait: " + queryWaitOK.lastQuery() + ", next Id: " + str(self.nextLineId))
-        modelWaitOK = QSqlQueryModel()
-        modelWaitOK.setQuery(queryWaitOK)
-        self.tableWaitOK.setModel(modelWaitOK)
+        #modelWaitOK = QSqlQueryModel()
+        model.setQuery(query)
         self.tableWaitOK.setColumnWidth(0,160)
         self.tableWaitOK.setColumnWidth(1,160)
         self.tableWaitOK.setColumnWidth(2,300)
