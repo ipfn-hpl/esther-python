@@ -163,7 +163,6 @@ class MainWindow(QMainWindow):
         self.update_queryCL()
         self.update_queryLastCL()
         self.update_queryPre()
-        #self.update_queryWaitOK()
         listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1100, 600))
         self.setCentralWidget(container)
@@ -196,13 +195,11 @@ class MainWindow(QMainWindow):
 #        print('plan is ' + str(i))
         self.planId = i
         self.update_queryCL()
-        #self.update_queryWaitOK()
 
     def list_changed(self, i):
         print('list is ' + str(i))
         self.listId = i
         self.update_queryCL()
-        #self.update_queryWaitOK()
 
 
     def update_signBy(self):
@@ -213,7 +210,6 @@ class MainWindow(QMainWindow):
             print("sign is %s" % (rb.sign))
             self.signBy = rb.sign
             self.update_queryLastCL()
-            self.update_queryWaitOK()
             #self.result_label.setText(f'You selected {rb.text()}')
 
     def update_queryCL(self, s=None):
@@ -225,7 +221,7 @@ class MainWindow(QMainWindow):
             "LineOrder, LineDesc FROM ChecklistLines "
             "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
             "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
             "WHERE Checklist = :list_id AND DayPlan = :plan_id "
             "ORDER BY LineOrder ASC"
         )
@@ -279,7 +275,7 @@ class MainWindow(QMainWindow):
             "SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, CheckLineSigned.SignedBy, EstherRoles.RoleName "
             "FROM CheckLineSigned "
             "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+            "INNER JOIN EstherRoles ON ChecklistLines.CheckBy = EstherRoles.RoleId "
             "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineStatusDate DESC LIMIT 4"
@@ -309,42 +305,6 @@ class MainWindow(QMainWindow):
         self.lastSigned = lastOK
         self.lastSignedId = lastLineId
         print("lastOrder: " + str(lastOK)+ ", lastLineId: " + str(lastLineId))
-
-    def update_queryWaitOK(self):
-        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
-        #print(s)
-        queryWaitOK = QSqlQuery(db=db)
-        queryWaitOK.prepare(
-            "SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
-            "FROM ChecklistLines "
-            "WHERE LineOrder > :l_order AND Checklist = :list_id AND SignedBy = :sign_by "
-            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-            "ORDER BY LineOrder ASC LIMIT 3"
-        )
-        #queryWaitOK.bindValue(":l_order", lastOK)
-
-        queryWaitOK.bindValue(":l_order", self.lastSigned)
-        queryWaitOK.bindValue(":list_id", self.listId)
-        queryWaitOK.bindValue(":sign_by", self.signBy)
-        queryWaitOK.exec()
-        if queryWaitOK.first():
-            self.nextLineId  = queryWaitOK.value(0)
-        else:
-            self.nextLineId  = 0
-        # print("Wait: " + queryWaitOK.lastQuery() + ", next Id: " + str(self.nextLineId))
-        modelWaitOK = QSqlQueryModel()
-        modelWaitOK.setQuery(queryWaitOK)
-        self.tableWaitOK.setModel(modelWaitOK)
-        self.tableWaitOK.setColumnWidth(0,160)
-        self.tableWaitOK.setColumnWidth(1,160)
-        self.tableWaitOK.setColumnWidth(2,300)
-
-
-#    def update_filter(self, s):
-#        filter_str = 'Checklist LIKE "{}"'.format(s)
-#        self.model.setFilter(filter_str)
-
-#        self.model.setFilter(filter_str)
 
 app = QApplication(sys.argv)
 window = MainWindow()

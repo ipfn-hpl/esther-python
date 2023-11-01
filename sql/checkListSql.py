@@ -9,7 +9,6 @@ import sys
 from reportlab.pdfgen import canvas
 
 from PyQt6.QtCore import QSize, Qt, QSortFilterProxyModel
-# from PyQt6.QtSql import QSqlDatabase, QSqlTableModel
 from PyQt6.QtGui import QFont
 from PyQt6.QtSql import (
     QSqlDatabase,
@@ -49,23 +48,24 @@ CHECK_LIST_QUERY = ("SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
             "LineOrder, LineDesc FROM ChecklistLines "
             "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
             "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+            "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
             "WHERE Checklist = :list_id AND DayPlan = :plan_id "
             "ORDER BY LineOrder ASC"
         )
 
 CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, "
-            "EstherRoles.RoleName, checkValue "
+            "EstherRoles.ShortName, SignValues.SignatureName "
             "FROM CheckLineSigned "
             "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-            "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+            "INNER JOIN EstherRoles ON ChecklistLines.CheckBy = EstherRoles.RoleId "
+            "INNER JOIN SignValues ON checkValue = SignValues.SignId "
             "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineStatusDate DESC LIMIT 4")
 
-CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
+CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, CheckBy "
             "FROM ChecklistLines "
-            "WHERE LineOrder > :l_order AND Checklist = :list_id AND SignedBy = :sign_by "
+            "WHERE LineOrder > :l_order AND Checklist = :list_id AND CheckBy = :sign_by "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineOrder ASC LIMIT 3")
 

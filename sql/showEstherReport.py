@@ -236,7 +236,6 @@ class MainWindow(QMainWindow):
             "esther_managers.manager_name, start_time, end_time "
             "FROM esther_reports "
             "INNER JOIN esther_managers ON esther_reports.manager_id = esther_managers.manager_id "
-            #"INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
             #"WHERE =shot_number :list_id AND DayPlan = :plan_id "
             "WHERE shot_number  > 160 "
             #"WHERE shot_number  = :shot_no "

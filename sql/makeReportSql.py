@@ -31,7 +31,7 @@ CHECK_LIST_QUERY = ("SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
                     "LineOrder, LineDesc FROM ChecklistLines "
                     "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
                     "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-                    "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
+                    "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
                     "WHERE Checklist = :list_id AND DayPlan = :plan_id "
                     "ORDER BY LineOrder ASC"
                     )
@@ -40,16 +40,10 @@ CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusD
                         "EstherRoles.RoleName, checkValue "
                         "FROM CheckLineSigned "
                         "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-                        "INNER JOIN EstherRoles ON ChecklistLines.SignedBy = EstherRoles.RoleId "
+                        "INNER JOIN EstherRoles ON ChecklistLines.CheckBy = EstherRoles.RoleId "
                         "WHERE CheckLineSigned.ShotNumber = :shot_no AND CheckLineSigned.SignedBy = :sign_by AND ChecklistLines.Checklist = :list_id "
                         #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
                         "ORDER BY LineStatusDate DESC LIMIT 4")
-
-CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, SignedBy "
-                            "FROM ChecklistLines "
-                            "WHERE LineOrder > :l_order AND Checklist = :list_id AND SignedBy = :sign_by "
-                            #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-                            "ORDER BY LineOrder ASC LIMIT 3")
 
 LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
 db = QSqlDatabase("QMARIADB")
@@ -107,7 +101,8 @@ def report_pdf(shotNo, signBy, listId):
             pdf.drawString(50, y, f"Name: {query.value(0)}")
             pdf.drawString(50, y-20, f"Description: {query.value(3)}")
             y -= 60
-
+    else:
+        print("NOT exec(). Query : " + query.executedQuery() + " signBy: ")
     data1= [['00', '01', '02', '03', '04','10', '11', '12', '13', '14'],
                 ['10', '11', '12', '13', '14', '10', '11', '12', '13', '14'],
                 ['20', '21', '22', '23', '24', '10', '11', '12', '13', '14'],
