@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-PyQt6 SQL App for signed Esther Checklists
+PyQt6 SQL App for signing Esther Checklists
 """
 
 #import os
 import sys
 
 from reportlab.pdfgen import canvas
+from makeReportSql import report_pdf
 
 from PyQt6.QtCore import QSize, Qt, QSortFilterProxyModel
 from PyQt6.QtGui import QFont
@@ -20,13 +21,13 @@ from PyQt6.QtSql import (
     QSqlQueryModel,
 )
 from PyQt6.QtWidgets import (
+    QWidget,
     QApplication,
     QLineEdit,
     QMainWindow,
     QTableView,
     QVBoxLayout,
     QHBoxLayout,
-    QWidget,
     QDialog,
     QDialogButtonBox,
     QCheckBox,
@@ -63,15 +64,16 @@ CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusD
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineStatusDate DESC LIMIT 4")
 
-CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, CheckBy "
+CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, "
+            "EstherRoles.ShortName "
             "FROM ChecklistLines "
+            "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
             "WHERE LineOrder > :l_order AND Checklist = :list_id AND CheckBy = :sign_by "
             #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
             "ORDER BY LineOrder ASC LIMIT 3")
 
-LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
+#LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
 db = QSqlDatabase("QMARIADB")
-#db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
 db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
@@ -79,6 +81,11 @@ db.setUserName("archive");
 db.setPassword("$archive");
 
 db.open()
+
+# General Query for quick selects
+queryGlobal = QSqlQuery(db=db)
+
+list_names = []
 
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
@@ -118,16 +125,16 @@ class MainWindow(QMainWindow):
         self.signBy = 0
         self.lastSigned = 0
         self.nextLineId  = 0
+        if queryGlobal.exec("SELECT ChecklistName FROM EstherChecklists ORDER BY ChecklistId ASC"):
+            while queryGlobal.next():
+                print(queryGlobal.value(0))
+                list_names.append(queryGlobal.value(0))
+            print(list_names)
         self.tableCL = QTableView()
         qryModel = QSqlQueryModel()
         self.tableCL.setModel(qryModel)
 
         self.tableLastCL = QTableView()
-        """
-        query = QSqlQuery(db=db)
-        query.prepare(CHECKLINE_LAST_QUERY)
-        self.tableLastCL.setModel(qryModel)
-        """
         query = QSqlQuery(db=db)
         query.prepare(CHECK_WAITING_LIST_QUERY)
         model = QSqlQueryModel()
@@ -137,17 +144,10 @@ class MainWindow(QMainWindow):
 
         container = QWidget()
 
-        #query = QSqlQuery("SELECT DayPlan, EstherChecklists.ChecklistName FROM ChecklistLines INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId", db=db)
-        #self.model.removeColumns(0,1)
-        #self.model.select()
-        #self.queryLastCL.exec()
-
-# Third Panel
-
         layoutTables = QVBoxLayout()
         self.tabs = QTabWidget()
         query = QSqlQuery(db=db)
-        for n, lst in enumerate(LIST_NAMES):
+        for n, lst in enumerate(list_names):
             query.prepare(CHECK_LIST_QUERY)
             query.bindValue(":list_id", n)
             query.bindValue(":plan_id", self.planId)
@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
 
         layoutTables.addWidget(self.tableLastCL)
 
-        label = QLabel('Next Lines')
+        label = QLabel('Next Lines to Check')
         label.setFont(QFont('Arial', 20))
         layoutTables.addWidget(label)
         layoutTables.addWidget(self.tableWaitOK)
@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
 
         refreshButt = QPushButton("Refresh")
         pdfButt = QPushButton("Report PDF")
-        pdfButt.clicked.connect(self.report_pdf)
+        pdfButt.clicked.connect(self.make_report_pdf)
 #        refreshButt.clicked.connect(self.refresh_model)
 
 #        layoutTools.addWidget(add_rec)
@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
         radiobutton.toggled.connect(self.update_signBy)
         layoutTools.addWidget(radiobutton)
         checkButt = QPushButton("Check Next Line")
-        checkButt.clicked.connect(self.checkButt_clicked)
+        checkButt.clicked.connect(self.checkLineButt_clicked)
         layoutTools.addWidget(checkButt)
 
         layoutMain = QHBoxLayout()
@@ -312,8 +312,8 @@ class MainWindow(QMainWindow):
         if (not query.exec()):
             print("Last CL Query: " + query.executedQuery() + " signBy: " + str(self.signBy))
             return
-        print("LastCL Query: " + query.executedQuery())
-        print(":shot_no", str(self.shotNo)  + " signBy: " + str(self.signBy))
+        #print("LastCL Query: " + query.executedQuery())
+        #print(":shot_no", str(self.shotNo)  + " signBy: " + str(self.signBy))
         # QSqlQueryModel::setQuery() is a member of the model, QSqlQueryModel::query().exec() 
         # is just a method on the query. So the model knows about the former and refreshes, 
         # but does not know you're doing the latter.
@@ -331,8 +331,6 @@ class MainWindow(QMainWindow):
         #self.tableLastCL.resizeColumnsToContents()
         self.tableLastCL.setAlternatingRowColors(True)
 
-        #while self.queryLastCL.next():
-        #    lastOK  = self.queryLastCL.value(0)
         if query.first():
 #            self.lastSignedLineId = query.value(0)
             self.lastSigned = query.value(1)
@@ -355,19 +353,20 @@ class MainWindow(QMainWindow):
         query.bindValue(":l_order", self.lastSigned)
         query.bindValue(":list_id", self.listId)
         query.bindValue(":sign_by", self.signBy)
-        query.exec()
-        if query.first():
-            self.nextLineId  = query.value(0)
+        if query.exec():
+            if query.first():
+                self.nextLineId  = query.value(0)
+            else:
+                self.nextLineId  = 0
+            model.setQuery(query)
+            self.tableWaitOK.setColumnWidth(0,160)
+            self.tableWaitOK.setColumnWidth(1,160)
+            self.tableWaitOK.setColumnWidth(2,300)
         else:
-            self.nextLineId  = 0
+            print("Last Wait Query: " + query.executedQuery())
         # print("Wait: " + queryWaitOK.lastQuery() + ", next Id: " + str(self.nextLineId))
-        #modelWaitOK = QSqlQueryModel()
-        model.setQuery(query)
-        self.tableWaitOK.setColumnWidth(0,160)
-        self.tableWaitOK.setColumnWidth(1,160)
-        self.tableWaitOK.setColumnWidth(2,300)
 
-    def checkButt_clicked(self):
+    def checkLineButt_clicked(self):
         #print("click ", s)
         qryCheckPrecedence = QSqlQuery(db=db)
         qryCheckPrecedence.prepare(
@@ -398,7 +397,19 @@ class MainWindow(QMainWindow):
             # print(qryCheckSigned.lastQuery() + "; Line Before: " + str(lineBefore))
             if not qryCheckSigned.first():
                 print("Line Before not Signed: " + str(lineBefore))
-                lines_not_found = lines_not_found + f'<p> not Signed: {lineBefore} </p>'
+                if not queryGlobal.exec(
+                        "SELECT EstherChecklists.ChecklistName, CheckLineId, Checklist FROM ChecklistLines "
+                        "INNER JOIN EstherChecklists ON Checklist = EstherChecklists.ChecklistId "
+                        f"WHERE CheckLineId = {lineBefore}"
+                        ):
+                     print(queryGlobal.lastQuery())
+
+                if queryGlobal.first():
+                    listName = queryGlobal.value(0)
+                else:
+                    listName = 'NoList'
+
+                lines_not_found = lines_not_found + f'<p>Line Id: {lineBefore} List: {listName} </p>'
                 missingSigned = True
             else:
                 print("Line Signed Value: " + str(qryCheckSigned.value(2)))
@@ -447,26 +458,8 @@ class MainWindow(QMainWindow):
             print("Cancel!")
 
         #insertCLine.bindValue(":sign_by", self.shotNo)
-    def report_pdf(self):
-        # Create the report
-        pdf = canvas.Canvas(f"report_{self.shotNo}.pdf")
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(50, 750, "Customer Report")
-        pdf.setFont("Helvetica", 12)
-        query = QSqlQuery(db=db)
-        query.prepare(CHECKLINE_LAST_QUERY)
-        #qryModel.setQuery(query)
-        #self.tableLastCL.setModel(qryModel)
-        query.bindValue(":shot_no", self.shotNo)
-        query.bindValue(":sign_by", self.signBy)
-        query.bindValue(":list_id", self.listId)
-        if (query.exec()):
-            y = 700
-            while query.next():
-                pdf.drawString(50, y, f"Name: {query.value(0)}")
-                pdf.drawString(50, y-20, f"Description: {query.value(3)}")
-                y -= 60
-        pdf.save()
+    def make_report_pdf(self):
+        report_pdf(self.shotNo, self.signBy, self.listId)
 
     #    self.model.select()
 
