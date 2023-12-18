@@ -60,8 +60,6 @@ db.setDatabaseName("archive");
 db.setUserName("archive");
 db.setPassword("$archive");
 
-db.open()
-
 list_names = []
 dataTable = []
 
@@ -122,7 +120,11 @@ def report_pdf(db, shotNo, listId):
     doc.build(elements)
 
 if __name__ == '__main__':
-    report_pdf(db, shotNum, listId)
+    if db.open():
+        report_pdf(db, shotNum, listId)
+    else:
+        print('Could not open db')
+
     #query = QSqlQuery(db=db)
 
 # vim: syntax=python ts=4 sw=4 sts=4 sr et
