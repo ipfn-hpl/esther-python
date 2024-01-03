@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 PyQt6 SQL App for signed Esther Reports
+Python version of http://esther.tecnico.ulisboa.pt/esther-php/show_report.php
 """
 
 #import os
@@ -53,8 +54,8 @@ from epics import caget, caput, cainfo
 #db.open()
 
 db = QSqlDatabase("QMARIADB")
-db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
-#db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
+db.setHostName("epics.ipfn.tecnico.ulisboa.pt")
+#db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt")
 #db.setHostName("10.10.136.177");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
@@ -64,6 +65,14 @@ db.setPassword(config.passReport);
 # db.setPassword("$report");
 
 db.open()
+
+CENTIG_ZERO = 273.15 # K
+BAR_TO_ATM = 1.013
+def partial_volume(pBar, tempC, chambVolL):
+    tempK = tempC + CENTIG_ZERO
+    parVol = pBar / BAR_TO_ATM / tempK * CENTIG_ZERO * chambVolL
+    return parVol
+
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
@@ -91,7 +100,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
-        self.shotNo = 177
+        self.shotNo = 298
         self.signBy = 0
         self.lastSigned = 0
         self.tableReports = QTableView()
@@ -121,7 +130,6 @@ class MainWindow(QMainWindow):
     #widget.setPrefix("$")
 #widget.setSuffix("c")
         shotSpin.setSingleStep(1) # Or e.g. 0.5 for QDoubleSpinBox
-        self.shotNo = 160
         shotSpin.setValue(self.shotNo)
         shotSpin.valueChanged.connect(self.shot_changed)
         layoutTools.addWidget(shotSpin)
@@ -146,7 +154,7 @@ class MainWindow(QMainWindow):
 
         self.tablePartial = QTableWidget(1,6)
         self.tablePartial.setVerticalHeaderLabels(('',))
-        self.tablePartial.setHorizontalHeaderLabels(('N2/He Purge','Oxigen','Helium I','Hidrogen','Helium II', 'Target'))
+        self.tablePartial.setHorizontalHeaderLabels(('N2/He Purge','Oxigen Fill','Helium I Fill','Hidrogen Fill','Helium II Fill', 'Target'))
         self.tablePartial.resizeColumnsToContents()
         #self.tablePartial.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         #self.tablePartial.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.MinimumExpanding)
@@ -159,7 +167,7 @@ class MainWindow(QMainWindow):
 
         layoutTools.addWidget(refreshButt)
 #        layoutTools.addWidget(QLabel('Exp. Phase'))
-        label = QLabel('Bottle Pressures (Bar)')
+        label = QLabel('Bottle Pressures / Bar')
         label.setFont(QFont('Arial', 20))
         layoutTables.addWidget(label)
         layoutTables.addWidget(self.tableBottles)
@@ -171,6 +179,8 @@ class MainWindow(QMainWindow):
         label.setFont(QFont('Arial', 20))
         layoutTables.addWidget(label)
         layoutTables.addWidget(self.tableVolumes)
+
+        self.tablePartial.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         self.tableVolumes.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
 
         layoutTables.addWidget(self.tableViewReports)
@@ -186,6 +196,10 @@ class MainWindow(QMainWindow):
 
     def set_table_cell(self, qR, table, name, lin, col):
         val  = qR.value(name)
+        item = QTableWidgetItem(f'{val:0.2f}')
+        table.setItem(lin,col, item)
+
+    def set_table_val(self, table, val, lin, col):
         item = QTableWidgetItem(f'{val:0.2f}')
         table.setItem(lin,col, item)
 
@@ -230,23 +244,68 @@ class MainWindow(QMainWindow):
             self.set_table_cell(queryReport, self.tableBottles, 'He1_bottle_final', 1, 1)
             self.set_table_cell(qRep, self.tableBottles, 'H_bottle_initial', 0, 2)
             self.set_table_cell(qRep, self.tableBottles, 'H_bottle_final', 1, 2)
-            self.set_table_cell(queryReport, self.tableBottles, 'N2_bottle_initial', 0, 4)
-            self.set_table_cell(queryReport, self.tableBottles, 'N2_bottle_final', 1, 4)
+            self.set_table_cell(queryReport, self.tableBottles, 'He2_bottle_initial', 0, 3)
+            self.set_table_cell(qRep, self.tableBottles, 'He2_bottle_final', 1, 3)
+            self.set_table_cell(qRep, self.tableBottles, 'N2_bottle_initial', 0, 4)
+            self.set_table_cell(qRep, self.tableBottles, 'N2_bottle_final', 1, 4)
+            self.set_table_cell(qRep, self.tableBottles, 'N2_command_bottle_initial', 0, 5)
+            self.set_table_cell(qRep, self.tableBottles, 'N2_command_bottle_final', 1, 5)
             self.tableBottles.setColumnWidth(5,100)
 #            self.tableBottles.setAlternatingRowColors(True)
-            val  = queryReport.value('')
             # lastOK      = queryReport.value(1)
             # item = QTableWidgetItem(f'{val:0.2f}')
             # #item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             # self.tableBottles.setItem(0,4, item)
-            self.set_table_cell(queryReport, self.tablePartial, 'pt901_end_s1', 0, 0)
-            self.set_table_cell(qRep, self.tablePartial, 'pt901_end_s1', 0, 1)
-            self.set_table_cell(queryReport, self.tablePartial, 'pt901_target', 0, 4)
+            #self.set_table_cell(queryReport, self.tablePartial, 'pt901_end_s1', 0, 0)
+            #self.set_table_cell(qRep, self.tablePartial, 'pt901_end_s1', 0, 0)
+            pS1 = qRep.value('pt901_end_s1')
+            self.set_table_val(self.tablePartial, pS1, 0, 0)
+            #self.set_table_cell(qRep, self.tablePartial, 'pt901_end_o', 0, 1)
+            #self.set_table_cell(qRep, self.tablePartial, 'pt901_end_o', 0, 1)
+            pO = qRep.value('pt901_end_o')
+            self.set_table_val(self.tablePartial, pO, 0, 1)
+            pHe1 = qRep.value('pt901_end_he1')
+            self.set_table_val(self.tablePartial, pHe1, 0, 2)
+            #self.set_table_cell(qRep, self.tablePartial, 'pt901_end_he1', 0, 2)
+            pH = qRep.value('pt901_end_h')
+            self.set_table_val(self.tablePartial, pH, 0, 3)
+            #self.set_table_cell(qRep, self.tablePartial, 'pt901_end_h', 0, 3)
+            pHe2 = qRep.value('pt901_end_he2')
+            self.set_table_val(self.tablePartial, pHe2, 0, 4)
+            #self.set_table_cell(qRep, self.tablePartial, 'pt901_end_he2', 0, 4)
+            self.set_table_cell(qRep, self.tablePartial, 'pt901_target', 0, 5)
+
+            self.set_table_cell(qRep, self.tableVolumes, 'bombe_volume', 0, 0)
+            chVol = qRep.value('bombe_volume')
+            tAmb = qRep.value('ambient_temperature')
+            pAmb = qRep.value('ambient_pressure') / 1000.0
+            #pS1 = pS1 + pAmb
+#def partial_volume(pBar, tempC, chambVolL):
+            vHe0 = partial_volume(pS1 + pAmb, tAmb, chVol)
+            vO = partial_volume(pO - pS1, tAmb, chVol)
+            vHe1 = partial_volume(pHe1 -pO, tAmb, chVol)
+            vH = partial_volume(pH - pHe1, tAmb, chVol)
+            vHe2 = partial_volume(pHe2 -pH, tAmb, chVol)
+            vHeTotal = vHe0 + vHe1 + vHe2
+            vTotal = partial_volume(pHe2 + pAmb, tAmb, chVol)
+            self.set_table_val(self.tableVolumes, vHe0, 1, 0)
+            self.set_table_val(self.tableVolumes, vO, 1, 1)
+            self.set_table_val(self.tableVolumes, vHe1, 1, 2)
+            self.set_table_val(self.tableVolumes, vH, 1, 3)
+            self.set_table_val(self.tableVolumes, vHe2, 1, 4)
+
+            self.set_table_val(self.tableVolumes, 1.0, 2, 1)
+            self.set_table_val(self.tableVolumes, vH / vO, 2, 3)
+            self.set_table_val(self.tableVolumes, vHeTotal / vO, 2, 5)
+            self.set_table_val(self.tableVolumes, vO / vH * 2.0, 3, 1)
+            self.set_table_val(self.tableVolumes, 2.0, 3, 3)
+            self.set_table_val(self.tableVolumes, vHeTotal / vH * 2.0, 3, 5)
+            # print('PP ' + str(chVol) + ' pAmb:' + str(pAmb))
         else:
             val  = 0
             lastLineId  = 0
             print('No Report')
-        print(queryReport.lastQuery() + str(val))
+        #print(queryReport.lastQuery() + str(val))
 
     def update_queryReports(self, s=None):
         #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
