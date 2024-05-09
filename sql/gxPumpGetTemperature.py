@@ -36,7 +36,7 @@ def get_temp(url):
                      ele_str)
     resHz = re.findall(r"self.parent.ObjectGaugeUpdate"
                        r" +\(184, +\'number\', +\'(\d+)\'", ele_str)
-    print(f"Freq: {int(resHz[0])}")
+    print(f"Freq: {int(resHz[0])} Hz")
     return int(res[0])
 
 
@@ -54,6 +54,10 @@ def read_loop(url, pv):
 
         try:
             temp = get_temp(url)
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt. Stopping")
+            caput(pv_name, 'nan')
+            exit()
         except Exception:
             caput(pv_name, 'nan')
             print("Can't get page")
@@ -87,6 +91,9 @@ def main(args):
         print(f"Temperature {temp} ºC")
 
     if (args.loop):
+        pv = 'ST'
+        pv_name = f"Esther:EDW:DryPump-{pv}-Temp"
+        caput(pv_name, 'nan')
         read_loop(url, 'ST')
 
     if (args.print):
