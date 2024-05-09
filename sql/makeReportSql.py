@@ -11,11 +11,12 @@ import sys
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch, cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import (Paragraph, Spacer, Table,
+from reportlab.platypus import (Paragraph, Spacer, Table, Image,
                                 TableStyle, SimpleDocTemplate,)
 from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
 from reportlab.lib import colors
 from reportlab.rl_config import defaultPageSize
+import config
 
 from PyQt6.QtSql import (
         QSqlDatabase,
@@ -24,6 +25,8 @@ from PyQt6.QtSql import (
 
 PAGE_HEIGHT=defaultPageSize[1]; PAGE_WIDTH=defaultPageSize[0]
 styleSheet = getSampleStyleSheet()
+# ['Title'] ['Heading2'] ['Heading3'] ['Normal'] ['BodyText']
+# https://www.programcreek.com/python/example/58583/reportlab.lib.styles.getSampleStyleSheet
 
 shotNum = 180
 listId = 0
@@ -32,16 +35,6 @@ if len(sys.argv) > 2:
 if len(sys.argv) > 1:
     shotNum = int(sys.argv[1])
 
-'''
-CHECK_LIST_QUERY = ("SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
-                    "LineOrder, LineDesc FROM ChecklistLines "
-                    "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-                    "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-                    "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
-                    "WHERE Checklist = :list_id AND DayPlan = :plan_id "
-                    "ORDER BY LineOrder ASC"
-                    )
-'''
 CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusDate, ChecklistLines.LineDesc, "
                         "EstherRoles.RoleName, EstherRoles.ShortName, checkValue "
                         "FROM CheckLineSigned "
@@ -51,14 +44,13 @@ CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusD
                         #"WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked  AND CheckLineSigned.SignedBy = :sign_by"
                         "ORDER BY LineStatusDate ASC")
 
-#LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
 db = QSqlDatabase("QMARIADB")
 #db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
 db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
 #db.setHostName("localhost");
 db.setDatabaseName("archive");
-db.setUserName("archive");
-db.setPassword("$archive");
+db.setUserName(config.username);
+db.setPassword(config.password);
 
 list_names = []
 dataTable = []
@@ -71,25 +63,29 @@ def report_pdf(db, shotNo, listId):
             #print(query.value(0))
             list_names.append(query.value(0))
     query.prepare(CHECKLINE_LAST_QUERY)
-    #qryModel.setQuery(query)
     query.bindValue(":shot_no", shotNo)
     query.bindValue(":list_id", listId)
     #P0 = Paragraph('A paragraph1', styleSheet["BodyText"])
     doc = SimpleDocTemplate(f"test_{shotNo}.pdf", pagesize=A4)
     #elements = [Spacer(1,1*inch)]
     elements = []
+    im = Image('logo-IPFN-compact.jpg', 4 * cm, 4.0 * 171.0 / 296.0 * cm)
+    im.hAlign = 'LEFT'
+
+    elements.append(im)
     styleNormal= styleSheet["Normal"]
-    p = Paragraph(f"Esther Report. Shot: {shotNo}. Check List: {list_names[listId]}", styleNormal)
+    # p = Paragraph(f"Esther Report. Shot: {shotNo}. Check List: {list_names[listId]}", styleNormal)
+    p = Paragraph(f"Esther Report. Shot: {shotNo}. Check List: {list_names[listId]}", styleSheet['Heading2'])
     #time_format = "yyyy-MM-dd HH:mm:ss"
     time_format = "HH:mm:ss"
     elements.append(p)
     elements.append(Spacer(1,0.2*inch))
     #elements.append(Paragraph(" ", style))
     styleDesc = ParagraphStyle(
-        #name='Normal',
-        name='Helvetica',
-        fontSize = 9,
-    )
+            #name='Normal',
+            name='Helvetica',
+            fontSize = 9,
+            )
     if (query.exec()):
         while query.next():
             #qn.append(query.next())
@@ -107,7 +103,7 @@ def report_pdf(db, shotNo, listId):
 
     else:
         print("NOT exec(). Query : " + query.executedQuery())
-    
+
     if(len(dataTable) > 0):
         t1=Table(dataTable, colWidths=(38, 400, 25, 50))
         t1.setStyle(TableStyle([('INNERGRID', (0,0), (-1,-1), 0.25, colors.black),
@@ -124,8 +120,6 @@ if __name__ == '__main__':
         report_pdf(db, shotNum, listId)
     else:
         print('Could not open db')
-
-    #query = QSqlQuery(db=db)
 
 # vim: syntax=python ts=4 sw=4 sts=4 sr et
 
