@@ -39,7 +39,8 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QLabel,
 )
-
+# Local module with DB configuration
+import config
 #basedir = os.path.dirname(__file__)
 
 # db = QSqlDatabase("QSQLITE")
@@ -74,11 +75,13 @@ CHECK_WAITING_LIST_QUERY = ("SELECT CheckLineId, LineOrder, LineDesc, "
 
 #LIST_NAMES = ["Master", "Combustion Driver", "Vacuum","Test Gases (CT, ST)","Shock Detection System","Optical Diagnostics","Microwave Diagnostics"]
 db = QSqlDatabase("QMARIADB")
-db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
+#db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
+db.setHostName(config.host);
 #db.setHostName("localhost");
-db.setDatabaseName("archive");
-db.setUserName("archive");
-db.setPassword("$archive");
+#db.setDatabaseName("archive");
+db.setDatabaseName(config.database);
+db.setUserName(config.username);
+db.setPassword(config.password);
 
 db.open()
 

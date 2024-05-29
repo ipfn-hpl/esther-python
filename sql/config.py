@@ -1,4 +1,4 @@
-# Esther DB auth
-# git update-index --assume-unchanged config.py
+host = "epics.ipfn.tecnico.ulisboa.pt"
+database = "archive"
 username = "xxxx"
 password = "xxxx"
