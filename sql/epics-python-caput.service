@@ -10,8 +10,8 @@ Environment="EPICS_CA_ADDR_LIST=192.168.0.22"
 Environment="EPICS_AUTO_CA_ADDR_LIST=NO"
 WorkingDirectory=/home/esther/git-repos/esther-python/sql
 ExecStart=/home/esther/git-repos/esther-python/sql/gxPumpEpicsPut.py 
-StandardOutput=syslog
-StandardError=syslog
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
