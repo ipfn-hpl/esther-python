@@ -1,5 +1,5 @@
 [Unit]
-Description=EPICS ESTHER Vacuum Python script for GxPumps 
+Description=EPICS ESTHER Vacuum Python script for GxPumps
 After=syslog.target
 
 [Service]
@@ -9,9 +9,18 @@ Group=epics
 Environment="EPICS_CA_ADDR_LIST=192.168.0.22"
 Environment="EPICS_AUTO_CA_ADDR_LIST=NO"
 WorkingDirectory=/home/esther/git-repos/esther-python/sql
-ExecStart=/home/esther/git-repos/esther-python/sql/gxPumpEpicsPut.py 
+ExecStart=/home/esther/git-repos/esther-python/sql/gxPumpEpicsPut.py
 StandardOutput=journal
 StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
+#
+# See systemd log
+# journalctl -r -u epics-python-caput
+#
+# Clean Log
+# du -hd1 /var/log/journal
+# journalctl --rotate
+# journalctl --vacuum-time 2d
+
