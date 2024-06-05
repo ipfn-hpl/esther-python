@@ -1,0 +1,1 @@
+sudo apt-get install python3-bs4 libqt6sql6-mysql python3-pyqt6 python3-reportlab python3-pyepics
