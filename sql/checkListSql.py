@@ -60,26 +60,26 @@ CHECKLINE_LAST_QUERY = (
         "INNER JOIN EstherRoles ON ChecklistLines.CheckBy = EstherRoles.RoleId "
         "INNER JOIN SignValues ON checkValue = SignValues.SignId "
         "WHERE CheckLineSigned.ShotNumber = :shot_no AND "
-        "CheckLineSigned.SignedBy = :sign_by AND "
+        # "CheckLineSigned.SignedBy = :sign_by AND "
         "ChecklistLines.Checklist = :list_id "
         # "WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
-        "ORDER BY LineStatusDate DESC LIMIT 4"
+        "ORDER BY LineStatusDate DESC LIMIT 5"
         )
 
 CHECK_WAITING_LIST_QUERY = (
         "SELECT CheckLineId, LineOrder, LineDesc, "
         "EstherChecklists.ChecklistName, "
         "DayPlans.DayPlanName, "
-        "EstherRoles.ShortName AS Responsible "
+        "EstherRoles.ShortName AS Responsible, CheckBy "
         "FROM ChecklistLines "
         "INNER JOIN EstherChecklists ON Checklist = EstherChecklists.ChecklistId "
         "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
         "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
-        "WHERE LineOrder > :l_order AND "
-        "Checklist = :list_id AND CheckBy = :sign_by "
-        "ORDER BY LineOrder ASC LIMIT 3"
+        "WHERE LineOrder > :l_order AND DayPlan = :d_plan AND "
+        "Checklist = :list_id "
+        "ORDER BY LineOrder ASC LIMIT 4"
         )
-# "WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked "
+        # "Checklist = :list_id AND CheckBy = :sign_by "
 
 db = QSqlDatabase("QMARIADB")
 db.setHostName(config.host)
@@ -92,7 +92,7 @@ db.open()
 # General Query for quick selects
 queryGlobal = QSqlQuery(db=db)
 
-
+FONT_NORMAL = QFont("Arial", 12)
 
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
@@ -131,11 +131,17 @@ class MainWindow(QMainWindow):
         self.signBy = 0
         self.lastSigned = 0
         self.nextLineId = 0
+        self.nextLineRole = 0
+        if queryGlobal.exec(
+                "SELECT ShotNumber FROM CheckLineSigned "
+                "ORDER BY ShotNumber DESC LIMIT 1"):
+            if queryGlobal.first():
+                self.shotNo = queryGlobal.value(0)
         list_names = []
         if queryGlobal.exec(
-                "SELECT ChecklistName FROM EstherChecklists ORDER BY ChecklistId ASC"):
+                "SELECT ChecklistName FROM EstherChecklists "
+                "ORDER BY ChecklistId ASC"):
             while queryGlobal.next():
-                print(queryGlobal.value(0))
                 list_names.append(queryGlobal.value(0))
             print(list_names)
         self.tableCL = QTableView()
@@ -154,7 +160,7 @@ class MainWindow(QMainWindow):
 
         layoutTables = QVBoxLayout()
         label = QLabel('CheckLists')
-        label.setFont(QFont('Arial', 20))
+        label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
         self.tabs = QTabWidget()
         query = QSqlQuery(db=db)
@@ -172,13 +178,13 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.list_changed)
         layoutTables.addWidget(self.tabs, stretch=3)
         label = QLabel('Checked Lines on this Shot')
-        label.setFont(QFont('Arial', 20))
+        label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
 
         layoutTables.addWidget(self.tableLastCL)
 
         label = QLabel('Next Lines to Check')
-        label.setFont(QFont('Arial', 20))
+        label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
         layoutTables.addWidget(self.tableWaitSign)
 
@@ -258,9 +264,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
 
     def plan_changed(self, i):
-#        print('plan is ' + str(i))
+        #        print('plan is ' + str(i))
         self.planId = i
-        #self.update_queryCL()
+        # self.update_queryCL()
         self.update_ChkLists()
         self.update_queryLastCL()
         self.update_queryWaitSign()
@@ -318,12 +324,13 @@ class MainWindow(QMainWindow):
         # qryModel.setQuery(query)
         # self.tableLastCL.setModel(qryModel)
         query.bindValue(":shot_no", self.shotNo)
-        query.bindValue(":sign_by", self.signBy)
+       # query.bindValue(":sign_by", self.signBy)
         query.bindValue(":list_id", self.listId)
         # if (not queryLastCL.exec()):
         if (not query.exec()):
-            print(f"NOT exec(). CL Query i: {i}", end='')
-            print(f"{query.executedQuery()} signBy: {self.signBy}")
+            # print(f"NOT exec(). CL Query i: {i}", end='')
+            print(f"NOT exec: {query.executedQuery()}")
+            # print(f"{query.executedQuery()} signBy: {self.signBy}")
             # print("Last CL Query: " + query.executedQuery() + " signBy: " + str(self.signBy))
             return
         # print(":shot_no", str(self.shotNo)  + " signBy: " + str(self.signBy))
@@ -362,10 +369,13 @@ class MainWindow(QMainWindow):
         # queryWaitOK = QSqlQuery(db=db)
         query.bindValue(":l_order", self.lastSigned)
         query.bindValue(":list_id", self.listId)
-        query.bindValue(":sign_by", self.signBy)
+        # query.bindValue(":sign_by", self.signBy)
+        query.bindValue(":d_plan", self.planId)
         if query.exec():
             if query.first():
                 self.nextLineId = query.value(0)
+                self.nextLineRole = query.value(6)
+                print(f"Next Role {self.nextLineRole}")
             else:
                 self.nextLineId = 0
             model.setQuery(query)
@@ -440,67 +450,73 @@ class MainWindow(QMainWindow):
             return True
 
     def checkLineButtOK_clicked(self):
-        if self.checkPrecendence():
-            insertCLine = QSqlQuery(db=db)
-            insertCLine.prepare(
-                "INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, "
-                "current_timestamp(), :cLine_id, :sign_by, :sign_val, NULL)")
-            insertCLine.bindValue(":shot_no", self.shotNo)
-            insertCLine.bindValue(":cLine_id", self.nextLineId)
-            insertCLine.bindValue(":sign_by", self.signBy)
-            insertCLine.bindValue(":sign_val", 0)  # OK
-            if insertCLine.exec():
-                print("Inserted record")
-                self.update_queryLastCL()
-                self.update_queryWaitSign()
-            else:
-                QMessageBox.critical(
-                        None, "Record NOT Inserted ", "dlg rBv: 0")
-                # print("NOT Inserted")
-                print(f"Insert failed: {insertCLine.lastQuery()}")
-                print(f":shot_no + {self.shotNo} :cLine_id {self.nextLineId} :sign_by {self.signBy}")
-        else:
-            print("Cancel!")
-
-    def checkLineButt_clicked(self):
-        if self.checkPrecendence():
-            insertCLine = QSqlQuery(db=db)
-            insertCLine.prepare(
-                "INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, "
-                "current_timestamp(), :cLine_id, :sign_by, :sign_val, NULL)")
-            insertCLine.bindValue(":shot_no", self.shotNo)
-            insertCLine.bindValue(":cLine_id", self.nextLineId)
-            insertCLine.bindValue(":sign_by", self.signBy)
-        # self.insertCLine.bindValue(":cLine_id", 6)
-            dlg = SignDialog(self)
-            if dlg.exec():
-                if dlg.rBv.isChecked():
-                    signVal = 0
-                elif dlg.rBa.isChecked():
-                    signVal = 1
-                else:
-                    signVal = 255
-                print(f"dlg rBv: {signVal}")
-                insertCLine.bindValue(":sign_val", signVal)
-            # print("Success! " + str(self.nextLineId))
+        if self.nextLineRole == self.signBy:
+            if self.checkPrecendence():
+                insertCLine = QSqlQuery(db=db)
+                insertCLine.prepare(
+                    "INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, "
+                    "current_timestamp(), :cLine_id, 0, :sign_val, NULL)")
+                insertCLine.bindValue(":shot_no", self.shotNo)
+                insertCLine.bindValue(":cLine_id", self.nextLineId)
+                # insertCLine.bindValue(":sign_by", self.signBy)
+                insertCLine.bindValue(":sign_val", 0)  # OK
                 if insertCLine.exec():
-                    QMessageBox.information(
-                        None, "Record Inserted ", f"dlg rBv: {signVal}")
                     print("Inserted record")
                     self.update_queryLastCL()
                     self.update_queryWaitSign()
                 else:
                     QMessageBox.critical(
-                        None, "Record NOT Inserted ", f"dlg rBv: {signVal}")
-                # print("NOT Inserted")
+                            None, "Record NOT Inserted ", "SQL Error")
                     print(f"Insert failed: {insertCLine.lastQuery()}")
-                    print(f":shot_no + {self.shotNo} :cLine_id {self.nextLineId} :sign_by {self.signBy}")
+                    # print(f":shot_no + {self.shotNo} :cLine_id {self.nextLineId} :sign_by {self.signBy}")
             else:
                 print("Cancel!")
         else:
-            print("Missing Lines!")
+            QMessageBox.warning(
+                    None, "NOT Inserted ", "Next Line not signed by you...")
 
-        # insertCLine.bindValue(":sign_by", self.shotNo)
+    def checkLineButt_clicked(self):
+        if self.nextLineRole == self.signBy:
+            if self.checkPrecendence():
+                insertCLine = QSqlQuery(db=db)
+                insertCLine.prepare(
+                    "INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, "
+                    "current_timestamp(), :cLine_id, 0, :sign_val, NULL)")
+                insertCLine.bindValue(":shot_no", self.shotNo)
+                insertCLine.bindValue(":cLine_id", self.nextLineId)
+                # insertCLine.bindValue(":sign_by", self.signBy)
+            # self.insertCLine.bindValue(":cLine_id", 6)
+                dlg = SignDialog(self)
+                if dlg.exec():
+                    if dlg.rBv.isChecked():
+                        signVal = 0
+                    elif dlg.rBa.isChecked():
+                        signVal = 1
+                    else:
+                        signVal = 255
+                    print(f"dlg rBv: {signVal}")
+                    insertCLine.bindValue(":sign_val", signVal)
+                # print("Success! " + str(self.nextLineId))
+                    if insertCLine.exec():
+                        QMessageBox.information(
+                            None, "Record Inserted ", f"dlg rBv: {signVal}")
+                        print("Inserted record")
+                        self.update_queryLastCL()
+                        self.update_queryWaitSign()
+                    else:
+                        QMessageBox.critical(
+                            None, "Record NOT Inserted ", f"dlg rBv: {signVal}")
+                    # print("NOT Inserted")
+                        print(f"Insert failed: {insertCLine.lastQuery()}")
+                        # print(f":shot_no + {self.shotNo} :cLine_id {self.nextLineId} :sign_by {self.signBy}")
+                else:
+                    print("Cancel!")
+            else:
+                print("Missing Lines!")
+        else:
+            QMessageBox.warning(
+                    None, "NOT Inserted ", "Next Line not signed by you...")
+
     def make_report_pdf(self):
         report_pdf(self.shotNo, self.signBy, self.listId)
 
@@ -521,34 +537,3 @@ window.show()
 app.exec()
 
 # vim: syntax=python ts=4 sw=4 sts=4 sr et
-
-"""
-    def update_queryCL(self, s=None):
-        #print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
-        #print(s)
-        queryCL = QSqlQuery(db=db)
-        queryCL.prepare(
-            "SELECT CheckLineId, ChecklistName, EstherRoles.RoleName, "
-            "LineOrder, LineDesc FROM ChecklistLines "
-            "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-            "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-            "INNER JOIN EstherRoles ON SignedBy = EstherRoles.RoleId "
-            "WHERE Checklist = :list_id AND DayPlan = :plan_id "
-            "ORDER BY LineOrder ASC"
-        )
-        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
-        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
-
-        queryCL.bindValue(":list_id", self.listId)
-        queryCL.bindValue(":plan_id", self.planId)
-        queryCL.exec()
-        modelCL = QSqlQueryModel()
-        modelCL.setQuery(queryCL)
-        self.tableCL.setModel(modelCL)
-        self.tableCL.setColumnWidth(0,60)
-        self.tableCL.setColumnWidth(1,100)
-        self.tableCL.setColumnWidth(2,100)
-        self.tableCL.setColumnWidth(3,60)
-        self.tableCL.setColumnWidth(4,600)
-
-"""
