@@ -45,12 +45,12 @@ CHECKLINE_LAST_QUERY = ("SELECT CheckLine, ChecklistLines.LineOrder, LineStatusD
                         "ORDER BY LineStatusDate ASC")
 
 db = QSqlDatabase("QMARIADB")
-#db.setHostName("epics.ipfn.tecnico.ulisboa.pt");
-db.setHostName("efda-marte.ipfn.tecnico.ulisboa.pt");
-#db.setHostName("localhost");
-db.setDatabaseName("archive");
-db.setUserName(config.username);
-db.setPassword(config.password);
+
+db.setHostName(config.host)
+db.setDatabaseName(config.database)
+db.setUserName(config.username)
+db.setPassword(config.password)
+
 
 list_names = []
 dataTable = []

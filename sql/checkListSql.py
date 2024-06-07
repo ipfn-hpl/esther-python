@@ -5,7 +5,7 @@ PyQt6 SQL App for signing Esther Checklists
 
 import sys
 
-from reportlab.pdfgen import canvas
+# from reportlab.pdfgen import canvas
 
 from PyQt6.QtCore import QSize, Qt, QSortFilterProxyModel
 from PyQt6.QtGui import QFont
@@ -39,6 +39,8 @@ from PyQt6.QtWidgets import (
 )
 # Local module with DB configuration
 import config
+
+from makeReportSql import report_pdf
 
 CHECK_LIST_QUERY = (
         "SELECT CheckLineId, ChecklistName, "
@@ -518,7 +520,8 @@ class MainWindow(QMainWindow):
                     None, "NOT Inserted ", "Next Line not signed by you...")
 
     def make_report_pdf(self):
-        report_pdf(self.shotNo, self.signBy, self.listId)
+        # report_pdf(self.shotNo, self.signBy, self.listId)
+        report_pdf(db, self.shotNo, self.listId)
 
     #    self.model.select()
 
