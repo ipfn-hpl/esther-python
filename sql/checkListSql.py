@@ -424,6 +424,7 @@ class MainWindow(QMainWindow):
         query.bindValue(":list_id", self.listId)
         query.bindValue(":sign_by", self.signBy)
         query.bindValue(":d_plan", self.planId)
+        missLines = []
         if query.exec():
             if query.first():
                 missLines = self.getMissingLines(query.value(0))
@@ -437,6 +438,7 @@ class MainWindow(QMainWindow):
                 self.updateMissingSignTable(missLines)
             else:
                 self.nextLineId = 0
+                print("Not exec() missing Lines")
             model.setQuery(query)
             self.tableWaitSign.setColumnWidth(0, 100)
             self.tableWaitSign.setColumnWidth(1, 100)
