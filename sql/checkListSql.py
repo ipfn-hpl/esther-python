@@ -47,60 +47,61 @@ import config
 from makeReportSql import report_pdf
 
 CHECK_LIST_QUERY = (
-        "SELECT CheckLineId, ChecklistName, "
-        "EstherRoles.RoleName, "
-        "LineOrder, LineDesc FROM ChecklistLines "
-        "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-        "INNER JOIN EstherChecklists ON ChecklistLines.Checklist = EstherChecklists.ChecklistId "
-        "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
-        "WHERE Checklist = :list_id AND DayPlan = :plan_id "
-        "ORDER BY LineOrder ASC"
+        "SELECT item.id, subsystem.name, "
+        "role.name AS Resp, "
+        "item.seq_order, item.name AS Action FROM item "
+        "INNER JOIN day_phase ON day_phase_id = day_phase.id "
+        "INNER JOIN subsystem ON item.subsystem_id = subsystem.id "
+        "INNER JOIN role ON role_id = role.id "
+        "WHERE subsystem_id = :list_id AND day_phase_id = :plan_id "
+        "ORDER BY seq_order ASC"
         )
 
 CHECKLINE_LAST_QUERY = (
-        "SELECT CheckLine, ChecklistLines.LineOrder, "
-        "LineStatusDate, ChecklistLines.LineDesc, "
-        "EstherRoles.ShortName, SignValues.SignatureName "
-        "FROM CheckLineSigned "
-        "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-        "INNER JOIN EstherRoles ON ChecklistLines.CheckBy = EstherRoles.RoleId "
-        "INNER JOIN SignValues ON checkValue = SignValues.SignId "
-        "WHERE CheckLineSigned.ShotNumber = :shot_no AND "
+        "SELECT item_id, item.seq_order, "
+        "time_date, item.name, "
+        "role.short_name AS Resp, complete_status.status "
+        "FROM complete "
+        "INNER JOIN item ON item_id = item.id "
+        "INNER JOIN role ON item.role_id = role.id "
+        "INNER JOIN complete_status ON "
+        "complete_status_id = complete_status.id "
+        "WHERE complete.shot = :shot_no AND "
         # "CheckLineSigned.SignedBy = :sign_by AND "
-        "ChecklistLines.Checklist = :list_id "
-        "ORDER BY LineStatusDate DESC LIMIT 5"
+        "item.subsystem_id = :list_id "
+        "ORDER BY time_date DESC LIMIT 5"
         )
 
 CHECK_WAITING_LIST_QUERY = (
-        "SELECT CheckLineId, LineOrder, LineDesc, "
-        "EstherChecklists.ChecklistName, "
-        "DayPlans.DayPlanName, "
-        "EstherRoles.ShortName AS Responsible, CheckBy "
-        "FROM ChecklistLines "
-        "INNER JOIN EstherChecklists ON Checklist = EstherChecklists.ChecklistId "
-        "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-        "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
-        "WHERE LineOrder > :l_order AND DayPlan = :d_plan AND "
-        "CheckBy = :sign_by AND Checklist = :list_id "
-        "ORDER BY LineOrder ASC LIMIT 4"
+        "SELECT item.id, seq_order, item.name AS Action, "
+        "subsystem.name AS System, "
+        "day_phase.name AS Phase, "
+        "role.short_name AS Resp "
+        "FROM item "
+        "INNER JOIN subsystem ON subsystem_id = subsystem.id "
+        "INNER JOIN day_phase ON day_phase_id = day_phase.id "
+        "INNER JOIN role ON role_id = role.id "
+        "WHERE seq_order > :l_order AND day_phase_id = :d_plan AND "
+        "role_id = :sign_by AND subsystem_id = :list_id "
+        "ORDER BY seq_order ASC LIMIT 4"
         )
 # "Checklist = :list_id AND CheckBy = :sign_by "
 LAST_SIGNED_QRY = (
-        "SELECT CheckLine, ChecklistLines.LineOrder "
-        "FROM CheckLineSigned "
-        "INNER JOIN ChecklistLines ON CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-        "WHERE CheckLineSigned.ShotNumber = :shot_no AND "
-        "ChecklistLines.CheckBy= :sign_by AND "
-        "ChecklistLines.Checklist = :list_id "
-        "ORDER BY LineStatusDate DESC LIMIT 1"
+        "SELECT item_id, item.seq_order "
+        "FROM complete "
+        "INNER JOIN item ON complete.item_id = item.id "
+        "WHERE complete.shot = :shot_no AND "
+        "item.role_id= :sign_by AND "
+        "item.subsystem_id = :list_id "
+        "ORDER BY time_date DESC LIMIT 1"
         )
 
 PRECENDENCE_QRY = (
-            "SELECT Line, PrecededBy "
-            "FROM CheckPrecedence "
-            "INNER JOIN ChecklistLines ON Line = ChecklistLines.CheckLineId "
-            "WHERE Line = :line_id "
-            "ORDER BY Line ASC"
+            "SELECT item_id, after_item_id "
+            "FROM precedence "
+            "INNER JOIN item ON item_id = item.id "
+            "WHERE item_id = :line_id "
+            "ORDER BY item_id ASC"
         )
 
 db = QSqlDatabase("QMARIADB")
@@ -156,14 +157,14 @@ class MainWindow(QMainWindow):
         self.lastSigned = 0
         self.nextLineId = -1
         if queryGlobal.exec(
-                "SELECT ShotNumber FROM CheckLineSigned "
-                "ORDER BY ShotNumber DESC LIMIT 1"):
+                "SELECT shot FROM complete "
+                "ORDER BY shot DESC LIMIT 1"):
             if queryGlobal.first():
                 self.shotNo = queryGlobal.value(0)
         list_names = []
         if queryGlobal.exec(
-                "SELECT ChecklistName FROM EstherChecklists "
-                "ORDER BY ChecklistId ASC"):
+                "SELECT name FROM subsystem "
+                "ORDER BY id ASC"):
             while queryGlobal.next():
                 list_names.append(queryGlobal.value(0))
             print(list_names)
@@ -313,7 +314,7 @@ class MainWindow(QMainWindow):
     def update_signBy(self):
         # get the radio button the send the signal
         rb = self.sender()
-        # check if the radio button is checked
+        # check if the radio button is checkedDayPlanId
         if rb.isChecked():
             print("signBy is %s" % (rb.sign))
             self.signBy = rb.sign
@@ -324,15 +325,14 @@ class MainWindow(QMainWindow):
         model = self.missingSignTable.model()
         query = QSqlQuery(db=db)
         sqlStr = (
-                "SELECT CheckLineId, LineOrder, LineDesc, "
-                "EstherChecklists.ChecklistName, DayPlans.DayPlanName, "
-                "EstherRoles.ShortName AS Responsible "
-                "FROM ChecklistLines "
-                "INNER JOIN EstherChecklists ON "
-                "Checklist = EstherChecklists.ChecklistId "
-                "INNER JOIN DayPlans ON DayPlan = DayPlans.DayPlanId "
-                "INNER JOIN EstherRoles ON CheckBy = EstherRoles.RoleId "
-                "WHERE CheckLineId IN ("
+                "SELECT item.id, seq_order, item.name, "
+                "subsystem.name AS System, day_phase.short_name AS Phase, "
+                "role.short_name AS Resp "
+                "FROM item "
+                "INNER JOIN subsystem ON subsystem_id = subsystem.id "
+                "INNER JOIN day_phase ON day_phase_id = day_phase.id "
+                "INNER JOIN role ON role_id = role.id "
+                "WHERE item.id IN ("
                 )
         Ids = ','.join(map(str, missingList))
         sqlStr = sqlStr + Ids + ")"
@@ -358,7 +358,7 @@ class MainWindow(QMainWindow):
             tabw.setAlternatingRowColors(True)
             tabw.setColumnWidth(0, 80)
             tabw.setColumnWidth(3, 100)
-            tabw.setColumnWidth(4, 400)
+            tabw.setColumnWidth(4, 500)
 
     def update_queryLastCL(self, s=None):
         # print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -450,13 +450,14 @@ class MainWindow(QMainWindow):
         qryCheckPrecedence = QSqlQuery(db=db)
         qryCheckPrecedence.prepare(PRECENDENCE_QRY)
         qryCheckPrecedence.bindValue(":line_id", nextLineId)
-        qryCheckPrecedence.exec()
+        if (not qryCheckPrecedence.exec()):
+            print(f"Prececence {qryCheckPrecedence.executedQuery()}")
 
         qryCheckSigned = QSqlQuery(db=db)
         qryCheckSigned.prepare(
-            "SELECT CheckLine, ShotNumber, checkValue "
-            "FROM CheckLineSigned "
-            "WHERE CheckLine = :line AND ShotNumber = :shot_no"
+            "SELECT item_id, shot, complete_status_id "
+            "FROM complete "
+            "WHERE item_id = :line AND shot = :shot_no"
         )
         missingList = []
         while qryCheckPrecedence.next():
@@ -472,7 +473,7 @@ class MainWindow(QMainWindow):
     def insertCheckedLine(self, value):
         insertCLine = QSqlQuery(db=db)
         insertCLine.prepare(
-            "INSERT INTO CheckLineSigned VALUES (NULL, :shot_no, "
+            "INSERT INTO complete VALUES (NULL, :shot_no, "
             "current_timestamp(), :cLine_id, :sign_val, NULL)")
         insertCLine.bindValue(":shot_no", self.shotNo)
         insertCLine.bindValue(":cLine_id", self.nextLineId)
