@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     # QCheckBox,
-    QComboBox,
+    # QComboBox,
     # QGroupBox,
     QMessageBox,
     QPushButton,
@@ -152,6 +152,7 @@ class SignDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Esther CheckList Manager")
         self.listId = 0
         self.planId = 1
         self.shotNo = 180

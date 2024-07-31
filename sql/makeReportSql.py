@@ -29,22 +29,11 @@ PAGE_HEIGHT = defaultPageSize[1]
 styleSheet = getSampleStyleSheet()
 # ['Title'] ['Heading2'] ['Heading3'] ['Normal'] ['BodyText']
 # https://www.programcreek.com/python/example/58583/reportlab.lib.styles.getSampleStyleSheet
-"""
-CHECK_LIST_QUERY = (
-        "SELECT item.id, subsystem.name, "
-        "role.name AS Resp, "
-        "item.seq_order, item.name AS Action FROM item "
-        "INNER JOIN day_phase ON day_phase_id = day_phase.id "
-        "INNER JOIN subsystem ON item.subsystem_id = subsystem.id "
-        "INNER JOIN role ON role_id = role.id "
-        "WHERE subsystem_id = :list_id AND day_phase_id = :plan_id "
-        "ORDER BY seq_order ASC"
-        )
-"""
+
 CHECKLINE_LAST_QUERY = (
         "SELECT item_id, item.seq_order, "
         "time_date, item.name, "
-        "role.short_name AS Resp, complete_status.status "
+        "role.short_name AS Resp, complete_status.short_status "
         "FROM complete "
         "INNER JOIN item ON item_id = item.id "
         "INNER JOIN role ON item.role_id = role.id "
@@ -127,7 +116,7 @@ def report_pdf(db, shotNo, listId):
             P0 = Paragraph(str(query.value('item.name')), styleDesc)
             # P0 = Paragraph(str(query.value('LineDesc')), styleSheet["BodyText"])
             line.append(P0)
-            line.append(query.value('complete_status.status'))
+            line.append(query.value('complete_status.short_status'))
             # line.append(query.value('LineStatusDate').toString(time_format))
             dateTime = query.value('time_date')
             line.append(dateTime.toString(time_format))
@@ -150,9 +139,11 @@ def report_pdf(db, shotNo, listId):
         elements.append(Spacer(1, 1 * cm))
         p3 = Paragraph("Signatures", styleNormal)
         elements.append(p3)
+        print(f'Report Completed for Shot: {shotNo}')
     else:
         p3 = Paragraph("NO Checked Lines in this Report", styleNormal)
         elements.append(p3)
+        print(f'No actions completed on Shot: {shotNo}')
 
     # write the document to disk
     doc.build(elements)
