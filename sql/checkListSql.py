@@ -23,6 +23,7 @@ from PyQt6.QtSql import (
     QSqlQueryModel,
 )
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QWidget,
     QApplication,
     # QLineEdit,
@@ -34,6 +35,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     # QCheckBox,
     QComboBox,
+    # QGroupBox,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -174,9 +176,9 @@ class MainWindow(QMainWindow):
 
         self.tableLastCL = QTableView()
 
-        self.missingSignTable = QTableView()
+        self.missingActionTable = QTableView()
         model = QSqlQueryModel()
-        self.missingSignTable.setModel(model)
+        self.missingActionTable.setModel(model)
 
         query = QSqlQuery(db=db)
         query.prepare(CHECK_WAITING_LIST_QUERY)
@@ -207,18 +209,18 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.list_changed)
         layoutTables.addWidget(self.tabs, stretch=3)
 
-        label = QLabel('Checked Lines on this Shot')
+        label = QLabel('Actions completed on this Shot')
         label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
 
         layoutTables.addWidget(self.tableLastCL, stretch=2)
 
-        label = QLabel('Missing Signatures')
+        label = QLabel('Missing Actions')
         label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
-        layoutTables.addWidget(self.missingSignTable, stretch=1)
+        layoutTables.addWidget(self.missingActionTable, stretch=1)
 
-        label = QLabel('Next Lines to Check')
+        label = QLabel('Next Actions to Check')
         label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
         layoutTables.addWidget(self.tableWaitSign, stretch=2)
@@ -237,11 +239,44 @@ class MainWindow(QMainWindow):
         layoutTools.addWidget(refreshButt)
         layoutTools.addWidget(pdfButt)
         layoutTools.addWidget(QLabel('Exp. Phase'))
-        widget = QComboBox()
-        widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
-        widget.currentIndexChanged.connect(self.plan_changed)
-        widget.setCurrentIndex(self.planId)
-        layoutTools.addWidget(widget)
+#         widget = QComboBox()
+#        widget.addItems(["StartOfDay", "Shot", "EndOfDay"])
+#        widget.currentIndexChanged.connect(self.plan_changed)
+#        widget.setCurrentIndex(self.planId)
+#        layoutTools.addWidget(widget)
+        # self._button_group = QButtonGroup()
+        # _button_group = QButtonGroup(self)
+        # _button_group.setExclusive(False)
+        # rB = QRadioButton('StartOfDay2', _button_group)
+        # _button_group.addButton(rB)
+        # layoutTools.addWidget(_button_group)
+        # self._button_group.idClicked.connect(self.button_group_clicked)
+        # self.groupBox = QGroupBox("Labels", self)
+        # layoutTools.addWidget(self.groupBox)
+
+        self.buttonGroupP = QButtonGroup(self)
+        self.buttonGroupP.setExclusive(True)
+
+        #self.radioButton1 = QRadioButton("Label 1")
+        #self.buttonGroup.addButton(self.radioButton1)
+        # self.groupBox.layout().addWidget(self.radioButton1)
+
+        radiobutton = QRadioButton('StartOfDay', self)
+        radiobutton.setChecked(True)
+        radiobutton.plan = 0
+        radiobutton.toggled.connect(self.change_plan)
+        self.buttonGroupP.addButton(radiobutton)
+        layoutTools.addWidget(radiobutton)
+        radiobutton = QRadioButton('Shot', self)
+        radiobutton.plan = 1
+        radiobutton.toggled.connect(self.change_plan)
+        self.buttonGroupP.addButton(radiobutton)
+        layoutTools.addWidget(radiobutton)
+        radiobutton = QRadioButton('EndOfDay', self)
+        radiobutton.plan = 2
+        radiobutton.toggled.connect(self.change_plan)
+        self.buttonGroupP.addButton(radiobutton)
+        layoutTools.addWidget(radiobutton)
 
         layoutTools.addWidget(QLabel('Shot'))
         shotSpin = QSpinBox()
@@ -260,16 +295,22 @@ class MainWindow(QMainWindow):
         layoutTools.addStretch()
         # .addSpacing(20)
         layoutTools.addWidget(QLabel('Checked By: '))
+        self.buttonGroupS = QButtonGroup(self)
+        self.buttonGroupS.setExclusive(True)
+
         radiobutton = QRadioButton('ChiefEngineer', self)
         radiobutton.setChecked(True)
         radiobutton.sign = 0
         radiobutton.toggled.connect(self.update_signBy)
+        self.buttonGroupS.addButton(radiobutton)
         layoutTools.addWidget(radiobutton)
 
         radiobutton = QRadioButton('Researcher', self)
         radiobutton.sign = 1
         radiobutton.toggled.connect(self.update_signBy)
+        self.buttonGroupS.addButton(radiobutton)
         layoutTools.addWidget(radiobutton)
+
         checkButtOK = QPushButton("Check Line OK")
         checkButtOK.clicked.connect(self.checkLineButtOK_clicked)
         layoutTools.addWidget(checkButtOK)
@@ -287,18 +328,28 @@ class MainWindow(QMainWindow):
 #        self.update_queryCL()
         self.update_queryLastCL()
         self.update_ChkLists()
-        self.updateMissingSignTable([10, 20])
+        self.updateMissingActionTables([10, 20])
         shotSpin.valueChanged.connect(self.shot_changed)
         # listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
 
+    def change_plan(self):
+        rb = self.sender()
+        # check if the radio button is checkedDayPlanId
+        if rb.isChecked():
+            # print("signBy is %s" % (rb.plan))
+            self.planId = rb.plan
+            self.update_ChkLists(rb.plan)
+            self.update_queryLastCL()
+
+    """
     def plan_changed(self, pId):
         self.planId = pId
         # self.update_queryCL()
         self.update_ChkLists(pId)
         self.update_queryLastCL()
-
+    """
     def list_changed(self, lid):
         # print('list is ' + str(l))
         self.listId = lid
@@ -321,8 +372,8 @@ class MainWindow(QMainWindow):
             # self.update_ChkLists()
             self.update_queryLastCL()
 
-    def updateMissingSignTable(self, missingList):
-        model = self.missingSignTable.model()
+    def updateMissingActionTables(self, missingList):
+        model = self.missingActionTable.model()
         query = QSqlQuery(db=db)
         sqlStr = (
                 "SELECT item.id, seq_order, item.name, "
@@ -435,7 +486,7 @@ class MainWindow(QMainWindow):
                     print("Missing Lines")
                     print(missLines)
                     self.nextLineId = -1
-                self.updateMissingSignTable(missLines)
+                self.updateMissingActionTables(missLines)
             else:
                 self.nextLineId = 0
                 print("Not exec() missing Lines")
