@@ -29,38 +29,50 @@ PAGE_HEIGHT = defaultPageSize[1]
 styleSheet = getSampleStyleSheet()
 # ['Title'] ['Heading2'] ['Heading3'] ['Normal'] ['BodyText']
 # https://www.programcreek.com/python/example/58583/reportlab.lib.styles.getSampleStyleSheet
+"""
+CHECK_LIST_QUERY = (
+        "SELECT item.id, subsystem.name, "
+        "role.name AS Resp, "
+        "item.seq_order, item.name AS Action FROM item "
+        "INNER JOIN day_phase ON day_phase_id = day_phase.id "
+        "INNER JOIN subsystem ON item.subsystem_id = subsystem.id "
+        "INNER JOIN role ON role_id = role.id "
+        "WHERE subsystem_id = :list_id AND day_phase_id = :plan_id "
+        "ORDER BY seq_order ASC"
+        )
+"""
 CHECKLINE_LAST_QUERY = (
-        "SELECT CheckLine, ChecklistLines.LineOrder, "
-        "LineStatusDate, ChecklistLines.LineDesc, "
-        "EstherRoles.RoleName, EstherRoles.ShortName, checkValue "
-        "FROM CheckLineSigned "
-        "INNER JOIN ChecklistLines ON "
-        "CheckLineSigned.CheckLine = ChecklistLines.CheckLineId "
-        "INNER JOIN EstherRoles ON ChecklistLines.CheckBy = EstherRoles.RoleId "
-        "WHERE CheckLineSigned.ShotNumber = :shot_no AND "
-        "ChecklistLines.Checklist = :list_id "
-        # "WHERE Checklist = :list_id AND ChiefEngineer = :ce_checked AND Researcher = :re_checked  AND CheckLineSigned.SignedBy = :sign_by"
-        "ORDER BY LineStatusDate ASC")
+        "SELECT item_id, item.seq_order, "
+        "time_date, item.name, "
+        "role.short_name AS Resp, complete_status.status "
+        "FROM complete "
+        "INNER JOIN item ON item_id = item.id "
+        "INNER JOIN role ON item.role_id = role.id "
+        "INNER JOIN complete_status ON "
+        "complete_status_id = complete_status.id "
+        "WHERE complete.shot = :shot_no AND "
+        # "CheckLineSigned.SignedBy = :sign_by AND "
+        "item.subsystem_id = :list_id "
+        "ORDER BY time_date DESC LIMIT 5"
+        )
 
 
 def report_pdf(db, shotNo, listId):
     list_names = []
-    dataTable = []
 
     query = QSqlQuery(db=db)
     # Create the report
     if query.exec(
-            "SELECT ChecklistName FROM "
-            "EstherChecklists ORDER BY ChecklistId ASC"
-            ):
+            "SELECT name FROM subsystem "
+            "ORDER BY id ASC"):
         while query.next():
             # print(query.value(0))
             list_names.append(query.value(0))
 
     listName = ''
     if query.exec(
-            "SELECT ClLongName FROM "
-            f"EstherChecklists WHERE ChecklistId={listId}"
+            "SELECT long_name FROM "
+            f"subsystem WHERE id={listId}"
             ):
         if query.first():
             listName = query.value(0)
@@ -101,6 +113,7 @@ def report_pdf(db, shotNo, listId):
     line.append('Test Procedure')
     line.append('Check')
     line.append('Time')
+    dataTable = []
     dataTable.append(line)
     dateTime = ' '
     if (query.exec()):
@@ -108,22 +121,22 @@ def report_pdf(db, shotNo, listId):
             # i qn.append(query.next())
             line = []  # clear line
             # line.append(query.value('CheckLine'))
-            line.append(f"{query.value('ShortName')}{query.value('LineOrder')}")
+            line.append(f"{query.value('Resp')}{query.value('item.seq_order')}")
             # print(str(query.value('LineStatusDate')))
             # print(query.value('LineDesc'))
-            P0 = Paragraph(str(query.value('LineDesc')), styleDesc)
+            P0 = Paragraph(str(query.value('item.name')), styleDesc)
             # P0 = Paragraph(str(query.value('LineDesc')), styleSheet["BodyText"])
             line.append(P0)
-            line.append(query.value('checkValue'))
+            line.append(query.value('complete_status.status'))
             # line.append(query.value('LineStatusDate').toString(time_format))
-            dateTime = query.value('LineStatusDate')
+            dateTime = query.value('time_date')
             line.append(dateTime.toString(time_format))
             dataTable.append(line)
 
     else:
         print("NOT exec(). Query : " + query.executedQuery())
 
-    if (len(dataTable) > 0):
+    if (len(dataTable) > 1):
         t1 = Table(dataTable, colWidths=(38, 400, 25, 50))
         t1.setStyle(TableStyle(
             [('INNERGRID', (0, 0), (-1, -1), 0.25, colors.black),
