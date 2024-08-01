@@ -11,7 +11,12 @@ import sys
 
 # from reportlab.pdfgen import canvas
 
-from PyQt6.QtCore import QSize, Qt, QSortFilterProxyModel
+from PyQt6.QtCore import (
+        QSize,
+        Qt,
+        QTimer,
+        QSortFilterProxyModel,
+        )
 from PyQt6.QtGui import QFont
 from PyQt6.QtSql import (
     QSqlDatabase,
@@ -258,9 +263,8 @@ class MainWindow(QMainWindow):
         self.buttonGroupP = QButtonGroup(self)
         self.buttonGroupP.setExclusive(True)
 
-        #self.radioButton1 = QRadioButton("Label 1")
-        #self.buttonGroup.addButton(self.radioButton1)
-        # self.groupBox.layout().addWidget(self.radioButton1)
+        # self.radioButton1 = QRadioButton("Label 1")
+        # self.buttonGroup.addButton(self.radioButton1)
 
         radiobutton = QRadioButton('StartOfDay', self)
         radiobutton.setChecked(True)
@@ -326,14 +330,19 @@ class MainWindow(QMainWindow):
         layoutMain.addLayout(layoutTables)
         container.setLayout(layoutMain)
 
-#        self.update_queryCL()
-        self.update_queryLastCL()
-        self.update_ChkLists()
-        self.updateMissingActionTables([10, 20])
         shotSpin.valueChanged.connect(self.shot_changed)
         # listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
+        self.update_panels()
+        self.updateMissingActionTables([10, 20])
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_panels)
+        self.timer.start(500)
+
+    def update_panels(self):
+        self.update_queryLastCL()
+        # self.update_ChkLists()
 
     def change_plan(self):
         rb = self.sender()
@@ -344,13 +353,6 @@ class MainWindow(QMainWindow):
             self.update_ChkLists(rb.plan)
             self.update_queryLastCL()
 
-    """
-    def plan_changed(self, pId):
-        self.planId = pId
-        # self.update_queryCL()
-        self.update_ChkLists(pId)
-        self.update_queryLastCL()
-    """
     def list_changed(self, lid):
         # print('list is ' + str(l))
         self.listId = lid
@@ -562,6 +564,10 @@ class MainWindow(QMainWindow):
 
     def make_report_pdf(self):
         report_pdf(db, self.shotNo, self.listId)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("HELLO!")
+        dlg.exec()
+        # QBtn = QDialogButtonBox.StandardButton.Ok
 
 
 #    def update_filter(self, s):
