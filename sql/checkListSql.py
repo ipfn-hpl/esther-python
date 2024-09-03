@@ -185,6 +185,9 @@ class MainWindow(QMainWindow):
         self.missingActionTable = QTableView()
         model = QSqlQueryModel()
         self.missingActionTable.setModel(model)
+        self.missingActionTable1 = QTableView()
+        model = QSqlQueryModel()
+        self.missingActionTable1.setModel(model)
 
         query = QSqlQuery(db=db)
         query.prepare(CHECK_WAITING_LIST_QUERY)
@@ -220,11 +223,15 @@ class MainWindow(QMainWindow):
         layoutTables.addWidget(label)
 
         layoutTables.addWidget(self.tableLastCL, stretch=2)
+        layoutMaTables = QHBoxLayout()
 
-        label = QLabel('Missing Actions')
-        label.setFont(FONT_NORMAL)
-        layoutTables.addWidget(label)
-        layoutTables.addWidget(self.missingActionTable, stretch=1)
+        self.MAlabel = QLabel('Missing Actions')
+        self.MAlabel.setFont(FONT_NORMAL)
+        # self.MAlabel.setStyleSheet("background-color: yellow; border: 1px solid black;")
+        layoutTables.addWidget(self.MAlabel)
+        layoutMaTables.addWidget(self.missingActionTable)
+        layoutMaTables.addWidget(self.missingActionTable1)
+        layoutTables.addLayout(layoutMaTables, stretch=1)
 
         label = QLabel('Next Actions to Check')
         label.setFont(FONT_NORMAL)
@@ -234,6 +241,7 @@ class MainWindow(QMainWindow):
         layoutTools = QVBoxLayout()
 
         refreshButt = QPushButton("Refresh")
+        refreshButt.clicked.connect(self.update_panels)
         pdfButt = QPushButton("Report PDF")
         pdfButt.clicked.connect(self.make_report_pdf)
 #        refreshButt.clicked.connect(self.refresh_model)
@@ -334,11 +342,15 @@ class MainWindow(QMainWindow):
         # listComb.currentIndexChanged.connect(self.list_changed)
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
-        self.update_panels()
+        # menu = self.menuBar()
+
+        # file_menu = menu.addMenu("&File")
+
+        # self.update_panels()
         self.updateMissingActionTables([10, 20])
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_panels)
-        self.timer.start(500)
+        self.timer.start(2000)
 
     def update_panels(self):
         self.update_queryLastCL()
@@ -484,10 +496,16 @@ class MainWindow(QMainWindow):
                 missLines = self.getMissingLines(query.value(0))
                 if not missLines:
                     print("No missing Lines")
+                    self.MAlabel.setStyleSheet("color: black; background-color: white")
+                    self.MAlabel.setText("Please Continue")
                     self.nextLineId = query.value(0)
                 else:
                     print("Missing Lines")
-                    print(missLines)
+                    self.MAlabel.setStyleSheet("color: red; background-color: "
+                                               "yellow; border: 1px solid black")
+                    self.MAlabel.setText("Please Hold. "
+                                         "Some Actions need to be completed first")
+                    ##  print(missLines)
                     self.nextLineId = -1
                 self.updateMissingActionTables(missLines)
             else:
@@ -581,6 +599,7 @@ class MainWindow(QMainWindow):
 app = QApplication(sys.argv)
 window = MainWindow()
 window.show()
-app.exec()
+sys.exit(app.exec())
+# app.exec()
 
 # vim: syntax=python ts=4 sw=4 sts=4 sr et
