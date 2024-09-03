@@ -4,7 +4,7 @@
 """
 PyQt6 SQL App for signing Esther Checklists
 author:  B. Carvalho
-email: bernardo.carvalho@tecnico.
+email: bernardo.carvalho@tecnico.ulisboa.pt
 """
 
 import sys
@@ -54,8 +54,7 @@ import config
 from makeReportSql import report_pdf
 
 CHECK_LIST_QUERY = (
-        "SELECT item.id, subsystem.name, "
-        "role.name AS Resp, "
+        "SELECT item.id, role.name AS Resp, "
         "item.seq_order, item.name AS Action FROM item "
         "INNER JOIN day_phase ON day_phase_id = day_phase.id "
         "INNER JOIN subsystem ON item.subsystem_id = subsystem.id "
@@ -185,9 +184,9 @@ class MainWindow(QMainWindow):
         self.missingActionTable = QTableView()
         model = QSqlQueryModel()
         self.missingActionTable.setModel(model)
-        self.missingActionTable1 = QTableView()
+        self.missingActionTableRE = QTableView()
         model = QSqlQueryModel()
-        self.missingActionTable1.setModel(model)
+        self.missingActionTableRE.setModel(model)
 
         query = QSqlQuery(db=db)
         query.prepare(CHECK_WAITING_LIST_QUERY)
@@ -229,8 +228,9 @@ class MainWindow(QMainWindow):
         self.MAlabel.setFont(FONT_NORMAL)
         # self.MAlabel.setStyleSheet("background-color: yellow; border: 1px solid black;")
         layoutTables.addWidget(self.MAlabel)
+        layoutTables.addWidget(QLabel('Chief ChiefEngineer   |  Researcher'))
         layoutMaTables.addWidget(self.missingActionTable)
-        layoutMaTables.addWidget(self.missingActionTable1)
+        layoutMaTables.addWidget(self.missingActionTableRE)
         layoutTables.addLayout(layoutMaTables, stretch=1)
 
         label = QLabel('Next Actions to Check')
@@ -390,7 +390,7 @@ class MainWindow(QMainWindow):
     def updateMissingActionTables(self, missingList):
         model = self.missingActionTable.model()
         query = QSqlQuery(db=db)
-        sqlStr = (
+        sql = (
                 "SELECT item.id, seq_order, item.name, "
                 "subsystem.name AS System, day_phase.short_name AS Phase, "
                 "role.short_name AS Resp "
@@ -400,12 +400,17 @@ class MainWindow(QMainWindow):
                 "INNER JOIN role ON role_id = role.id "
                 "WHERE item.id IN ("
                 )
-        Ids = ','.join(map(str, missingList))
-        sqlStr = sqlStr + Ids + ")"
+        sqlQry = sql + ','.join(map(str, missingList))
+        sqlStr = sqlQry + ") AND role_id = 0"
         # query.exec(sqlStr)
         if (not query.exec(sqlStr)):
-            print(f"{query.executedQuery()}")
+            print(f"CE MA {query.executedQuery()}")
+        model.setQuery(query)
 
+        model = self.missingActionTableRE.model()
+        sqlStr = sqlQry + ") AND role_id = 1"
+        if (not query.exec(sqlStr)):
+            print(f"RE MA {query.executedQuery()}")
         model.setQuery(query)
 
     def update_ChkLists(self, planId=1):
@@ -422,9 +427,9 @@ class MainWindow(QMainWindow):
             # return
             model.setQuery(query)
             tabw.setAlternatingRowColors(True)
-            tabw.setColumnWidth(0, 80)
-            tabw.setColumnWidth(3, 100)
-            tabw.setColumnWidth(4, 500)
+            tabw.setColumnWidth(0, 50)
+            tabw.setColumnWidth(2, 80)
+            tabw.setColumnWidth(3, 500)
 
     def update_queryLastCL(self, s=None):
         # print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -493,12 +498,13 @@ class MainWindow(QMainWindow):
         missLines = []
         if query.exec():
             if query.first():
-                missLines = self.getMissingLines(query.value(0))
+                nextLine = query.value(0)
+                missLines = self.getMissingLines(nextLine)
                 if not missLines:
                     print("No missing Lines")
                     self.MAlabel.setStyleSheet("color: black; background-color: white")
                     self.MAlabel.setText("Please Continue")
-                    self.nextLineId = query.value(0)
+                    self.nextLineId = nextLine
                 else:
                     print("Missing Lines")
                     self.MAlabel.setStyleSheet("color: red; background-color: "
