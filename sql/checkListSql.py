@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
     QTableView,
     QVBoxLayout,
     QHBoxLayout,
+    QGridLayout,
     QDialog,
     QDialogButtonBox,
     # QCheckBox,
@@ -54,8 +55,8 @@ import config
 from makeReportSql import report_pdf
 
 CHECK_LIST_QUERY = (
-        "SELECT item.id, role.name AS Resp, "
-        "item.seq_order, item.name AS Action FROM item "
+        "SELECT item.id, item.seq_order, role.name AS Resp, "
+        "item.name AS Action FROM item "
         "INNER JOIN day_phase ON day_phase_id = day_phase.id "
         "INNER JOIN subsystem ON item.subsystem_id = subsystem.id "
         "INNER JOIN role ON role_id = role.id "
@@ -158,11 +159,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Esther CheckList Manager")
         self.listId = 0
-        self.planId = 1
-        self.shotNo = 180
+        self.planId = 0
         self.signBy = 0
         self.lastSigned = 0
         self.nextLineId = -1
+        self.shotNo = 180
         if queryGlobal.exec(
                 "SELECT shot FROM complete "
                 "ORDER BY shot DESC LIMIT 1"):
@@ -175,9 +176,6 @@ class MainWindow(QMainWindow):
             while queryGlobal.next():
                 list_names.append(queryGlobal.value(0))
             print(list_names)
-        self.tableCL = QTableView()
-        qryModel = QSqlQueryModel()
-        self.tableCL.setModel(qryModel)
 
         self.tableLastCL = QTableView()
 
@@ -198,39 +196,34 @@ class MainWindow(QMainWindow):
         container = QWidget()
 
         layoutTables = QVBoxLayout()
-        label = QLabel('CheckLists')
+        label = QLabel('CheckList Systems')
         label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
         self.tabs = QTabWidget()
-        query = QSqlQuery(db=db)
         for n, lst in enumerate(list_names):
-            query.prepare(CHECK_LIST_QUERY)
-            query.bindValue(":list_id", n)
-            query.bindValue(":plan_id", self.planId)
-            query.exec()
             qryModel = QSqlQueryModel()
-            qryModel.setQuery(query)
             tableVw = QTableView()
             tableVw.setModel(qryModel)
             self.tabs.addTab(tableVw, lst)
-#            self.tabs.addTab(self.tableCL, lst)
+
         self.tabs.currentChanged.connect(self.list_changed)
         layoutTables.addWidget(self.tabs, stretch=3)
 
-        label = QLabel('Actions completed on this Shot')
+        label = QLabel('Actions already completed on this Shot')
         label.setFont(FONT_NORMAL)
         layoutTables.addWidget(label)
 
         layoutTables.addWidget(self.tableLastCL, stretch=2)
-        layoutMaTables = QHBoxLayout()
+        layoutMaTables = QGridLayout()  # QHBoxLayout()
 
         self.MAlabel = QLabel('Missing Actions')
         self.MAlabel.setFont(FONT_NORMAL)
         # self.MAlabel.setStyleSheet("background-color: yellow; border: 1px solid black;")
         layoutTables.addWidget(self.MAlabel)
-        layoutTables.addWidget(QLabel('Chief ChiefEngineer   |  Researcher'))
-        layoutMaTables.addWidget(self.missingActionTable)
-        layoutMaTables.addWidget(self.missingActionTableRE)
+        layoutMaTables.addWidget(QLabel('Chief Engineer'), 0, 0)
+        layoutMaTables.addWidget(QLabel('Researcher'), 0, 1)
+        layoutMaTables.addWidget(self.missingActionTable, 1, 0)
+        layoutMaTables.addWidget(self.missingActionTableRE, 1, 1)
         layoutTables.addLayout(layoutMaTables, stretch=1)
 
         label = QLabel('Next Actions to Check')
@@ -343,18 +336,16 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
         # menu = self.menuBar()
-
         # file_menu = menu.addMenu("&File")
-
         # self.update_panels()
         self.updateMissingActionTables([10, 20])
+        self.update_ChkLists()
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_panels)
         self.timer.start(2000)
 
     def update_panels(self):
         self.update_queryLastCL()
-        # self.update_ChkLists()
 
     def change_plan(self):
         rb = self.sender()
@@ -369,7 +360,6 @@ class MainWindow(QMainWindow):
         # print('list is ' + str(l))
         self.listId = lid
         # self.update_queryCL()
-        # self.update_ChkLists()
         self.update_queryLastCL()
 
     def shot_changed(self, s):
@@ -392,8 +382,7 @@ class MainWindow(QMainWindow):
         query = QSqlQuery(db=db)
         sql = (
                 "SELECT item.id, seq_order, item.name, "
-                "subsystem.name AS System, day_phase.short_name AS Phase, "
-                "role.short_name AS Resp "
+                "subsystem.name AS System, day_phase.short_name AS Phase "
                 "FROM item "
                 "INNER JOIN subsystem ON subsystem_id = subsystem.id "
                 "INNER JOIN day_phase ON day_phase_id = day_phase.id "
@@ -402,23 +391,30 @@ class MainWindow(QMainWindow):
                 )
         sqlQry = sql + ','.join(map(str, missingList))
         sqlStr = sqlQry + ") AND role_id = 0"
-        # query.exec(sqlStr)
         if (not query.exec(sqlStr)):
             print(f"CE MA {query.executedQuery()}")
         model.setQuery(query)
+        self.missingActionTable.setColumnWidth(0, 30)
+        self.missingActionTable.setColumnWidth(1, 40)
+        self.missingActionTable.setColumnWidth(2, 250)
+        self.missingActionTable.setColumnWidth(3, 50)
 
         model = self.missingActionTableRE.model()
         sqlStr = sqlQry + ") AND role_id = 1"
         if (not query.exec(sqlStr)):
             print(f"RE MA {query.executedQuery()}")
         model.setQuery(query)
+        self.missingActionTableRE.setColumnWidth(0, 30)
+        self.missingActionTableRE.setColumnWidth(1, 40)
+        self.missingActionTableRE.setColumnWidth(2, 250)
 
     def update_ChkLists(self, planId=1):
         # print('count is ' + str(self.tabs.count()))
+        query = QSqlQuery(db=db)
         for i in range(self.tabs.count()):
             tabw = self.tabs.widget(i)
             model = tabw.model()
-            query = model.query()
+            query.prepare(CHECK_LIST_QUERY)
             query.bindValue(":plan_id", planId)
             query.bindValue(":list_id", i)
             if (not query.exec()):
@@ -427,9 +423,10 @@ class MainWindow(QMainWindow):
             # return
             model.setQuery(query)
             tabw.setAlternatingRowColors(True)
-            tabw.setColumnWidth(0, 50)
+            tabw.setColumnWidth(0, 30)
+            tabw.setColumnWidth(1, 30)
             tabw.setColumnWidth(2, 80)
-            tabw.setColumnWidth(3, 500)
+            tabw.setColumnWidth(3, 700)
 
     def update_queryLastCL(self, s=None):
         # print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -462,6 +459,8 @@ class MainWindow(QMainWindow):
         self.tableLastCL.setSortingEnabled(True)
         # self.tableLastCL.reset()
         # self.tableLastCL.show()
+        self.tableLastCL.setColumnWidth(0, 30)
+        self.tableLastCL.setColumnWidth(1, 40)
         self.tableLastCL.setColumnWidth(3, 400)
         # self.tableLastCL.resizeColumnsToContents()
         self.tableLastCL.setAlternatingRowColors(True)
