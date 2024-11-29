@@ -17,7 +17,7 @@ from PyQt6.QtCore import (
         QTimer,
         QSortFilterProxyModel,
         )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont  # , QHeaderView
 from PyQt6.QtSql import (
     QSqlDatabase,
     # QSqlRelation,
@@ -48,12 +48,12 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QTabWidget,
     QLabel,
+    QHeaderView
 )
 # Local module with DB configuration
 import config
 
 from makeReportSql import report_pdf
-
 CHECK_LIST_QUERY = (
         "SELECT item.id, item.seq_order, role.name AS Resp, "
         "item.name AS Action FROM item "
@@ -179,9 +179,12 @@ class MainWindow(QMainWindow):
 
         self.tableLastCL = QTableView()
 
-        self.missingActionTable = QTableView()
+        self.tableMissingAction = QTableView()
         model = QSqlQueryModel()
-        self.missingActionTable.setModel(model)
+        self.tableMissingAction.setModel(model)
+        self.tableMissingAction.resizeColumnsToContents()
+        self.tableMissingAction.horizontalHeader().setStretchLastSection(True)
+        #self.missingActionTable.setColumnWidth(2, 250)
         self.missingActionTableRE = QTableView()
         model = QSqlQueryModel()
         self.missingActionTableRE.setModel(model)
@@ -192,6 +195,8 @@ class MainWindow(QMainWindow):
         model.setQuery(query)
         self.tableWaitSign = QTableView()
         self.tableWaitSign.setModel(model)
+        self.tableWaitSign.resizeColumnsToContents()
+        self.tableWaitSign.horizontalHeader().setStretchLastSection(True)
 
         container = QWidget()
 
@@ -203,7 +208,17 @@ class MainWindow(QMainWindow):
         for n, lst in enumerate(list_names):
             qryModel = QSqlQueryModel()
             tableVw = QTableView()
+            # tableVw.setColumnWidth(3, 700)
             tableVw.setModel(qryModel)
+            tableVw.resizeColumnsToContents()
+            # tableVw.setColumnWidth(0, 30)
+            mode = QHeaderView.ResizeMode.Interactive
+            #tableVw.horizontalHeader().resizeSection(1, 30)
+            tableVw.horizontalHeader().setDefaultSectionSize(30)
+            tableVw.horizontalHeader().setSectionResizeMode(mode)
+#            tableVw.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            tableVw.horizontalHeader().setStretchLastSection(True)
+            tableVw.horizontalHeader().resizeSection(0, 60)
             self.tabs.addTab(tableVw, lst)
 
         self.tabs.currentChanged.connect(self.list_changed)
@@ -222,7 +237,7 @@ class MainWindow(QMainWindow):
         layoutTables.addWidget(self.MAlabel)
         layoutMaTables.addWidget(QLabel('Chief Engineer'), 0, 0)
         layoutMaTables.addWidget(QLabel('Researcher'), 0, 1)
-        layoutMaTables.addWidget(self.missingActionTable, 1, 0)
+        layoutMaTables.addWidget(self.tableMissingAction, 1, 0)
         layoutMaTables.addWidget(self.missingActionTableRE, 1, 1)
         layoutTables.addLayout(layoutMaTables, stretch=1)
 
@@ -378,7 +393,7 @@ class MainWindow(QMainWindow):
             self.update_queryLastCL()
 
     def updateMissingActionTables(self, missingList):
-        model = self.missingActionTable.model()
+        model = self.tableMissingAction.model()
         query = QSqlQuery(db=db)
         sql = (
                 "SELECT item.id, seq_order, item.name, "
@@ -394,10 +409,10 @@ class MainWindow(QMainWindow):
         if (not query.exec(sqlStr)):
             print(f"CE MA {query.executedQuery()}")
         model.setQuery(query)
-        self.missingActionTable.setColumnWidth(0, 30)
-        self.missingActionTable.setColumnWidth(1, 40)
-        self.missingActionTable.setColumnWidth(2, 250)
-        self.missingActionTable.setColumnWidth(3, 50)
+        # self.missingActionTable.setColumnWidth(0, 30)
+        # self.missingActionTable.setColumnWidth(1, 40)
+        # self.missingActionTable.setColumnWidth(2, 250)
+        # self.missingActionTable.setColumnWidth(3, 50)
 
         model = self.missingActionTableRE.model()
         sqlStr = sqlQry + ") AND role_id = 1"
@@ -423,10 +438,10 @@ class MainWindow(QMainWindow):
             # return
             model.setQuery(query)
             tabw.setAlternatingRowColors(True)
-            tabw.setColumnWidth(0, 30)
-            tabw.setColumnWidth(1, 30)
-            tabw.setColumnWidth(2, 80)
-            tabw.setColumnWidth(3, 700)
+            # tabw.setColumnWidth(0, 30)
+            # tabw.setColumnWidth(1, 30)
+            # tabw.setColumnWidth(2, 80)
+            # tabw.setColumnWidth(3, 700)
 
     def update_queryLastCL(self, s=None):
         # print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
@@ -517,9 +532,9 @@ class MainWindow(QMainWindow):
                 self.nextLineId = 0
                 print("Not exec() missing Lines")
             model.setQuery(query)
-            self.tableWaitSign.setColumnWidth(0, 100)
-            self.tableWaitSign.setColumnWidth(1, 100)
-            self.tableWaitSign.setColumnWidth(2, 400)
+            # self.tableWaitSign.setColumnWidth(0, 100)
+            # self.tableWaitSign.setColumnWidth(1, 100)
+            #self.tableWaitSign.setColumnWidth(2, 400)
         else:
             print(f"Wait List NOT exec: {query.executedQuery()}")
 
