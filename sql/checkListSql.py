@@ -66,8 +66,9 @@ CHECK_LIST_QUERY = (
 
 CHECKLINE_LAST_QUERY = (
         "SELECT item_id, item.seq_order, "
-        "time_date, item.name, "
-        "role.short_name AS Resp, complete_status.status "
+        "time_date, "
+        "role.short_name AS Resp, complete_status.status, "
+        "item.name "
         "FROM complete "
         "INNER JOIN item ON item_id = item.id "
         "INNER JOIN role ON item.role_id = role.id "
@@ -472,11 +473,13 @@ class MainWindow(QMainWindow):
         self.tableLastCL.setModel(proxyModel)
         self.tableLastCL.sortByColumn(1, Qt.SortOrder.AscendingOrder)
         self.tableLastCL.setSortingEnabled(True)
+        self.tableLastCL.resizeColumnsToContents()
+        self.tableLastCL.horizontalHeader().setStretchLastSection(True)
         # self.tableLastCL.reset()
         # self.tableLastCL.show()
-        self.tableLastCL.setColumnWidth(0, 30)
-        self.tableLastCL.setColumnWidth(1, 40)
-        self.tableLastCL.setColumnWidth(3, 400)
+        # self.tableLastCL.setColumnWidth(0, 30)
+        # self.tableLastCL.setColumnWidth(1, 40)
+        # self.tableLastCL.setColumnWidth(3, 400)
         # self.tableLastCL.resizeColumnsToContents()
         self.tableLastCL.setAlternatingRowColors(True)
 
