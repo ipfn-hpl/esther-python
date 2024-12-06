@@ -77,9 +77,8 @@ def task1():
 
 
 def taskFireQuantel():
-    time.sleep(1)
     qt = quantel()
-    # reply = qt.standBy()
+    time.sleep(0.5)
     reply = qt.triggerQSwitch()
     qt.close()
     print(reply)
