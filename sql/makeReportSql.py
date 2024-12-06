@@ -42,9 +42,10 @@ CHECKLINE_LAST_QUERY = (
         "WHERE complete.shot = :shot_no AND "
         # "CheckLineSigned.SignedBy = :sign_by AND "
         "item.subsystem_id = :list_id "
-        "ORDER BY time_date DESC LIMIT 5"
+        "ORDER BY time_date DESC"
         )
 
+#        "ORDER BY time_date DESC LIMIT 5"
 
 def report_pdf(db, shotNo, listId):
     list_names = []
