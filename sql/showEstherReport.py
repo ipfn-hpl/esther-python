@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QAbstractScrollArea
 )
 
-import config
+import config_local as cfg
 # from epics import caget  # , caput  # , cainfo
 
 # import os
@@ -60,10 +60,10 @@ BAR_TO_ATM = 1.013
 ADJUSTTOCONTENTS_POL = QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents
 
 db = QSqlDatabase("QMARIADB")
-db.setHostName(config.host)
-db.setDatabaseName(config.database)
-db.setUserName(config.username)
-db.setPassword(config.password)
+db.setHostName(cfg.host)
+db.setDatabaseName(cfg.database)
+db.setUserName(cfg.username)
+db.setPassword(cfg.password)
 db.open()
 
 
