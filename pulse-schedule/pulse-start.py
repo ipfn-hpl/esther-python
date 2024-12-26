@@ -1,6 +1,14 @@
+#!/home/esther/.local/venvs/python-epics/bin/python3
+#
 #!/usr/bin/env python3
 """
 https://stackoverflow.com/questions/8241099/executing-tasks-in-parallel-in-python
+
+
+Usage: rpsa_client -d --detect
+
+Detect Mode:
+	This mode allows you to determine the IP addresses that are in the network in streaming mode. By default, the search takes 5 seconds.
 
 """
 
@@ -10,6 +18,8 @@ import io
 import time
 from threading import Thread
 import subprocess
+
+from epics import caget, caput  # , cainfo
 
 
 class kistlerCom():
@@ -147,7 +157,11 @@ def parse_args():
     parser.add_argument('-c', '--redpitayaConfig',
                         action='store_true', help='Check Red Pitaya Config')
     parser.add_argument('-f', '--fire',
-                        action='store_true', help='Fire Quantel')
+                        action='store_true',
+                        help='Fire ESTHER Pulse and acquisition')
+    parser.add_argument('-t', '--trigger',
+                        action='store_true',
+                        help='Trigger Quantel Laser Q-Switch')
     parser.add_argument('-k', '--kistler',
                         action='store_true', help='Reset Kistler')
     return parser.parse_args()
@@ -166,7 +180,7 @@ def task1():
     print("Task 1 Finished")
 
 
-def taskRPitayaStart(host="10.10.136.232"):
+def taskRPitayaStart(host="10.10.136.233"):
     # list_files = subprocess.run(["ls", "-l"])
     # list_files = subprocess.run(["ls", "-l"], stdout=subprocess.DEVNULL)
     # print("The exit code was: %d" % list_files.returncode)
@@ -175,7 +189,7 @@ def taskRPitayaStart(host="10.10.136.232"):
                                "--remote",
                                "--mode=start",
                                f"--hosts={host:s}"])
-    print("RP Start exit code was: %d" % rp_query.returncode)
+    print("RP Start %s  exit code was: %d" % (host, rp_query.returncode))
 
 
 def taskFireQuantel():
@@ -185,6 +199,18 @@ def taskFireQuantel():
     qt.close()
     print(reply)
     print("Trigger Quantel Finished")
+
+
+def taskEpics():
+    pt901 = caget("Esther:gas:PT901")
+    print(f"PT901: {pt901:e}")
+    flow_sp = caget("Esther:MFC-ST:FSetpoint")
+    print(f"Flow SP: {flow_sp}")
+    caput('Esther:MFC-CT:Reset', 1)
+    caput('Esther:MFC-ST:Reset', 1)
+    time.sleep(1.0)
+    caput('Esther:MFC-CT:Reset', 0)
+    caput('Esther:MFC-ST:Reset', 0)
 
 
 def checkRPitayaConfig(host="10.10.136.232"):
@@ -198,28 +224,26 @@ def checkRPitayaConfig(host="10.10.136.232"):
     # The subprocess.run() facilitates this by its input argument:
 
 
-def task4():
-    pass
-
-
 def task5():
     pass
 
 
-def firePulse():
-    print("Firing Pulse")
+def firePulse(host="10.10.136.223"):
+    print("Firing Esther Pulse")
     t0 = Thread(target=taskResetKistler)
-    # t1 = Thread(target=task1)
-    t1 = Thread(target=taskRPitayaStart)
+    t1 = Thread(target=taskRPitayaStart, args=(host,))
     t2 = Thread(target=taskFireQuantel)
+    t3 = Thread(target=taskEpics)
 
     t0.start()
     t1.start()
     t2.start()
+    t3.start()
 
     t0.join()
     t1.join()
     t2.join()
+    t3.join()
 
 
 if __name__ == '__main__':
@@ -246,12 +270,20 @@ if __name__ == '__main__':
         print(reply)
         exit()
 
+    if args.trigger:
+        qt = quantel()
+        reply = qt.triggerQSwitch()
+        qt.close()
+        print(reply)
+        print("Trigger Quantel Finished")
+        exit()
+
     if args.redpitayaConfig:
-        checkRPitayaConfig(host=args.host_rp)
+        checkRPitayaConfig(args.host_rp)
         exit()
 
     if args.fire:
-        firePulse()
+        firePulse(args.host_rp)
 
     # if your arduino was running on a serial port other than '/dev/ttyACM0/'
     # declare: qt = quantel(serial_port='/dev/ttyXXXX')
@@ -268,4 +300,4 @@ if __name__ == '__main__':
         return line
 """
 
-# vim: syntax=python ts=4 sw=4 sts=4 sr et    
+# vim: syntax=python ts=4 sw=4 sts=4 sr et
