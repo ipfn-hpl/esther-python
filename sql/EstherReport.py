@@ -5,11 +5,12 @@ PyQt6 SQL App for Esther Reports
 Python version of http://esther.tecnico.ulisboa.pt/esther-php/show_report.php
 """
 
+import os
 import sys
 
-from PyQt6.QtCore import QSize  # , Qt
+from PyQt6.QtCore import QSize, QDate  # , Qt
 
-# from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QAction, QIcon  # QFont
 # from PyQt6 import QtWidgets
 
 from PyQt6.QtSql import (
@@ -22,12 +23,12 @@ from PyQt6.QtSql import (
     QSqlQueryModel,
 )
 from PyQt6.QtWidgets import (
+    QWidget,
     QApplication,
-    QLineEdit,
+    QLineEdit, QDateEdit,
     QMainWindow,
     QTableView,
-    QVBoxLayout, QHBoxLayout, QGridLayout,
-    QWidget,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QDialog,
     QDialogButtonBox, QPushButton,
     QCheckBox,
@@ -36,11 +37,14 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QLabel,
     QTableWidget, QTableWidgetItem,
+    QStatusBar,
+    QToolBar,
+    QTabWidget,
     # QSizePolicy,
-    QAbstractScrollArea
+    QAbstractScrollArea,
 )
 
-import config_local as cfg
+import config as cfg
 # from epics import caget  # , caput  # , cainfo
 
 # import os
@@ -54,6 +58,8 @@ import config_local as cfg
 # db = QSqlDatabase("QSQLITE")
 #  d b.setDatabaseName(os.path.join(basedir, "chinook.sqlite"))
 
+basedir = os.path.dirname(__file__)
+
 CENTIG_ZERO = 273.15  # K
 BAR_TO_ATM = 1.013
 
@@ -64,7 +70,8 @@ db.setHostName(cfg.host)
 db.setDatabaseName(cfg.database)
 db.setUserName(cfg.username)
 db.setPassword(cfg.password)
-db.open()
+# db.setPassword("xxx")
+# db.open()
 
 
 def partial_volume(pBar, tempC, chambVolL):
@@ -102,8 +109,17 @@ class MainWindow(QMainWindow):
         self.tableReports = QTableView()
         container = QWidget()
         layoutMain = QHBoxLayout()
-        layoutTools = QVBoxLayout()
+        # layoutTools = QVBoxLayout()
         layoutTables = QVBoxLayout()
+        if not db.open():
+            print("DB not openned")
+            sys.exit(-1)
+        model = QSqlTableModel(db=db)
+        model.setTable('reports')
+        model.setFilter("shot > 100")
+        model.select()
+        self.tableViewReports = QTableView()
+        self.tableViewReports.setModel(model)
 
         self.search = QLineEdit()
 
@@ -126,13 +142,61 @@ class MainWindow(QMainWindow):
         shotSpin.setSingleStep(1)  # Or e.g. 0.5 for QDoubleSpinBox
         shotSpin.setValue(self.shotNo)
         # shotSpin.valueChanged.connect(self.shot_changed)
-        layoutTools.addWidget(shotSpin)
+        # layoutTools.addWidget(shotSpin)
 
         # tableModelReports = QSqlTableModel(db=db)
         # tableModelReports.setTable('esther_reports')
+        self.tabs = QTabWidget()
+        personal_page = QWidget()
+        layout = QFormLayout()
+        personal_page.setLayout(layout)
+        layout.addRow('First Name:', QLineEdit())
+        layout.addRow('Last Name:', QLineEdit())
+        layout.addRow('DOB:', QDateEdit(QDate.currentDate()))
+        """
+        layoutGrd = QGridLayout()
+        self.Date = QLabel('Date 11-10-2021 ')
+        layoutGrd.addWidget(self.Date, 0, 0)
+        self.Manager = QLabel('Manager: Mário Lino da Silva')
+        layoutGrd.addWidget(self.Manager, 1, 0)
+        self.STime = QLabel('Start Time: 14:21:48')
+        layoutGrd.addWidget(self.STime, 2, 0)
+        self.RTime = QLabel('Rest Time 00:34:00')
+        layoutGrd.addWidget(self.RTime, 3, 0)
+        self.AmbTemp = QLabel('Amb. Temp')
+        layoutGrd.addWidget(self.AmbTemp, 4, 0)
+        """
+        self.tabs.addTab(personal_page, 'Info')
+
+        layoutTables.addWidget(self.tabs, stretch=3)
+        layoutTables.addWidget(self.tableViewReports)
+#        layoutMain.addLayout(layoutTools)
+        layoutMain.addLayout(layoutTables)
+
+        toolbar = QToolBar("My main toolbar")
+        toolbar.setIconSize(QSize(16, 16))
+        self.addToolBar(toolbar)
+
+        button_action = QAction(
+            QIcon(os.path.join(basedir, "icons/rocket--plus.png")),
+            "Your button",
+            self,
+        )
+        button_action.setStatusTip("This is your button")
+        button_action.triggered.connect(self.onMyToolBarButtonClick)
+        button_action.setCheckable(True)
+        toolbar.addAction(button_action)
+        toolbar.addWidget(shotSpin)
+        toolbar.addWidget(refreshButt)
+
+        self.setStatusBar(QStatusBar(self))
+
         container.setLayout(layoutMain)
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
+
+    def onMyToolBarButtonClick(self, s):
+        print("click", s)
 
     def setTableCell(self, qR, table, name, lin, col):
         val = qR.value(name)
@@ -305,7 +369,7 @@ class MainWindow(QMainWindow):
 app = QApplication(sys.argv)
 window = MainWindow()
 window.show()
-sys.exit(app.exec())
-# app.exec()
+# sys.exit(app.exec())
+app.exec()
 
 # vim: syntax=python ts=4 sw=4 sts=4 sr et
