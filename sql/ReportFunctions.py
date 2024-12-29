@@ -5,6 +5,7 @@
 https://stackoverflow.com/questions/8241099/executing-tasks-in-parallel-in-python
 
 
+https://mysqlclient.readthedocs.io/user_guide.html
 
 Detect Mode:
 	This mode allows you to determine the IP addresses that are in the network in streaming mode. By default, the search takes 5 seconds.
@@ -13,10 +14,18 @@ Detect Mode:
 
 import argparse
 import MySQLdb
+import numpy as np
 # Local module with DB configuration
 import config
 
-
+BOTTLES_CHANNELS = [
+    {'name': 'PT101', 'pv': 'Esther:gas:PT101'},
+    {'name': 'PT201', 'pv': 'Esther:gas:PT201'},
+    {'name': 'PT301', 'pv': 'Esther:gas:PT301'},
+    {'name': 'PT401', 'pv': 'Esther:gas:PT401'},
+    {'name': 'PT501', 'pv': 'Esther:gas:PT501'},
+    {'name': 'PT801', 'pv': 'Esther:gas:PT801'},
+    ]
 
 class EstherDB():
     """
@@ -31,12 +40,13 @@ class EstherDB():
                 password=config.password,
                 database=config.database)
 
-    def GetLastShot(self):
+    def GetLastShot(self, series='S'):
         c = self.db.cursor()
         query = (
                 "SELECT id, shot FROM reports "
+                "WHERE esther_series_name = %s "
                 "ORDER BY id DESC LIMIT 1")
-        c.execute(query)
+        c.execute(query, series)
         return c.fetchone()
 
     def InsertShot(self, series, shot, ce, re):
@@ -56,20 +66,37 @@ class EstherDB():
             raise ValueError
 
         self.db.commit()
-        Id, shot = self.GetLastShot()
-        return Id, shot
+        return self.GetLastShot(series)
+        # return Id, shot
 
-    def BottlePressures(self, shot_id, phase):
+    def GetBottlePressures(self, shot_id):
+        c = self.db.cursor()
+        pvals = []
+        PHS = ['CC_Start', 'CC_End']
+        for p in PHS:
+            bvals = []
+            for b in BOTTLES_CHANNELS:
+                query = ("SELECT float_val FROM sample "
+                        "WHERE reports_id = %s "
+                        "AND short_name = %s "
+                        "AND pulse_phase = %s")
+                c.execute(query, (shot_id, b['name'], 'CC_Start'))
+                fv = c.fetchone()
+                bvals.append(fv)
+            # print(c._last_executed)
+            pvals.append(bvals)
+        # return np.array(pvals)
+        cols = []
+        for b in BOTTLES_CHANNELS:
+            cols.append(b['name'])
+        # bData = {'columns': cols, 'data': np.array(pvals)}
+        bData = {'columns': cols, 'data': pvals}
+        return bData  # np.array(pvals)
+
+    def SaveBottlePressures(self, shot_id, phase):
         from epics import caget  # , caput  # , cainfo
         c = self.db.cursor()
-        bottles_channels = [
-                {'name': 'PT101', 'pv': 'Esther:gas:PT101'},
-                {'name': 'PT201', 'pv': 'Esther:gas:PT201'},
-                {'name': 'PT301', 'pv': 'Esther:gas:PT301'},
-                {'name': 'PT401', 'pv': 'Esther:gas:PT401'},
-                ]
-        for b in bottles_channels:
-
+        for b in BOTTLES_CHANNELS:
             pval = caget(b['pv'])
             query = ("INSERT INTO sample "
                     "(time_date, reports_id, short_name, pulse_phase, float_val) "
@@ -82,7 +109,7 @@ class EstherDB():
                 print('(1062, Duplicate entry ')
                 # Print the actual query executed
                 print(c._last_executed)
-                raise ValueError
+                # raise ValueError
         self.db.commit()
 
 
@@ -126,23 +153,6 @@ def bottle_pressures(db, shot_id, phase):
             print(c._last_executed)
 
 
-def insert_report(db, series, shot, ce, re):
-    c = db.cursor()
-    query = ("INSERT INTO reports "
-             "(id, esther_series_name, shot, chief_engineer_id, researcher_id) "
-             "VALUES (NULL, %s, %s, %s, %s)")
-    try:
-        c.execute(query, (series, shot, ce, re,))
-        db.commit()
-    except MySQLdb._exceptions.IntegrityError:
-        #  print("1062, Duplicate entry 'S-101' for key 'esther_series_name'")
-        print(c.statement)
-        print(query)
-        exit(-1)
-
-    Id, shot = get_last_shot(db)
-    return Id, shot
-    print(f"Id {Id}, {shot}")
     # c.executemany(
 """
 
@@ -155,18 +165,23 @@ if __name__ == '__main__':
                         action='store_true', help='Insert test')
 
     dB = EstherDB()
-    Id, shot = dB.GetLastShot()
-    print(f"Id {Id}, {shot}")
+    # Id, shot = dB.GetLastShot()
+    result = dB.GetLastShot(series='S')
+    print(result)
+    # print(f"Id {Id}, {shot}")
     args = parser.parse_args()
     if (args.newReport):
         Id, shot = dB.InsertShot('S', shot + 1, 3, 1)
         print(f"Inserted {Id}, {shot}")
-        dB.BottlePressures(Id, 'CC_Start')
-        dB.BottlePressures(Id, 'End')
+        dB.SaveBottlePressures(Id, 'CC_Start')
+        dB.SaveBottlePressures(Id, 'End')
         # insert_report(db, 'S', 101, 3, 1)
         exit()
     if (args.test):
-        #bottle_pressures(db, 303, 'CC_Start')
+        result = dB.GetLastShot(series='E')
+        if result is not None:
+            print(result)
+        # bottle_pressures(db, 303, 'CC_Start')
         exit()
 
     # args = parse_args()

@@ -8,16 +8,16 @@ Python version of http://esther.tecnico.ulisboa.pt/esther-php/show_report.php
 import os
 import sys
 
-from PyQt6.QtCore import QSize, QDate  # , Qt
+from PyQt6.QtCore import QSize, QDate, Qt
+from PyQt6 import QtCore
 
 from PyQt6.QtGui import QAction, QIcon  # QFont
-# from PyQt6 import QtWidgets
 
 from PyQt6.QtSql import (
     QSqlDatabase,
-    # QSqlRelation,
+    QSqlRelation,
     # QSqlRelationalDelegate,
-    # QSqlRelationalTableModel,
+    QSqlRelationalTableModel,
     QSqlTableModel,
     QSqlQuery,
     QSqlQueryModel,
@@ -43,6 +43,9 @@ from PyQt6.QtWidgets import (
     # QSizePolicy,
     QAbstractScrollArea,
 )
+
+from ReportFunctions import EstherDB
+import pandas as pd
 
 import config as cfg
 # from epics import caget  # , caput  # , cainfo
@@ -80,6 +83,67 @@ def partial_volume(pBar, tempC, chambVolL):
     return parVol
 
 
+class NewShotDialog(QDialog):
+    def __init__(self, parent=None):  # <1>
+        super().__init__(parent)
+
+        # print("Pare: " + str(parent.shotNo))
+        self.setWindowTitle("Insert New Shot!")
+
+        buttons = (
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttonBox = QDialogButtonBox(buttons)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(self.buttonBox)
+        self.setLayout(self.layout)
+
+
+class TableModel(QtCore.QAbstractTableModel):
+    def __init__(self, data):
+        super().__init__()
+        self._data = data
+
+    def data(self, index, role):
+        if role == Qt.ItemDataRole.DisplayRole:
+            value = self._data.iloc[index.row(), index.column()]
+            if isinstance(value, float):
+                # Render float to 2 dp
+                return "%.2f" % ValueError
+            # Default (anything not captured above: e.g. int)
+            return str(value)
+
+    def rowCount(self, index):
+        return self._data.shape[0]
+
+    def columnCount(self, index):
+        return self._data.shape[1]
+
+    def headerData(self, section, orientation, role):
+        if role == Qt.ItemDataRole.DisplayRole:
+            if orientation == Qt.Orientation.Horizontal:
+                return str(self._data.columns[section])
+            if orientation == Qt.Orientation.Vertical:
+                return str(self._data.index[section])
+
+
+"""
+    def data(self, index, role):
+        if role == Qt.ItemDataRole.DisplayRole:
+            # Note: self._data[index.row()][index.column()] will also work
+            value = self._data[index.row(), index.column()]
+            return str(value)
+
+    def rowCount(self, index):
+        return self._data.shape[0]
+
+    def columnCount(self, index):
+        return self._data.shape[1]
+"""
+
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
@@ -105,7 +169,19 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.shotNo = 298
+        self.eDb = EstherDB()
+        combo = QComboBox()
+        combo.addItems(['B', 'S', 'E'])
+        combo.setCurrentIndex(1)
+        self.series = 'S'
+        # combo.currentIndexChanged.connect(self.combo_changed)
+        combo.currentTextChanged.connect(self.combo_changed)
+        # shotId, shotNo = self.eDb.GetLastShot()
+        result = self.eDb.GetLastShot()
+        if result is not None:
+            print(result)
+            self.lastShotId = result[0]
+            self.lastShotNo = result[1]
         self.tableReports = QTableView()
         container = QWidget()
         layoutMain = QHBoxLayout()
@@ -114,9 +190,12 @@ class MainWindow(QMainWindow):
         if not db.open():
             print("DB not openned")
             sys.exit(-1)
-        model = QSqlTableModel(db=db)
+        # model = QSqlTableModel(db=db)
+        model = QSqlRelationalTableModel(db=db)
         model.setTable('reports')
         model.setFilter("shot > 100")
+        model.setRelation(3, QSqlRelation("operator", "id", "name"))
+        model.setRelation(4, QSqlRelation("operator", "id", "name"))
         model.select()
         self.tableViewReports = QTableView()
         self.tableViewReports.setModel(model)
@@ -140,7 +219,7 @@ class MainWindow(QMainWindow):
 # widget.setPrefix("$")
 # widget.setSuffix("c")
         shotSpin.setSingleStep(1)  # Or e.g. 0.5 for QDoubleSpinBox
-        shotSpin.setValue(self.shotNo)
+        shotSpin.setValue(self.lastShotNo)
         # shotSpin.valueChanged.connect(self.shot_changed)
         # layoutTools.addWidget(shotSpin)
 
@@ -166,14 +245,31 @@ class MainWindow(QMainWindow):
         self.AmbTemp = QLabel('Amb. Temp')
         layoutGrd.addWidget(self.AmbTemp, 4, 0)
         """
-        self.tabs.addTab(personal_page, 'Info')
+        self.tabs.addTab(personal_page, 'Summary')
+        self.tableBottles = QTableView()
+        self.tabs.addTab(self.tableBottles, 'Bottle Pressures')
+        result = self.eDb.GetBottlePressures(self.lastShotId)
+        # print(result['data'])
+        df = pd.DataFrame(
+                # You need to transpose your numpy array:
+                # result['data'].T,
+                result['data'],
+                columns=result['columns'],
+                index=["Initial", "Final",],
+        )
+        #df.index = ["Initial", "Final"]
+        # df.loc['Difference'] = df.apply(lambda x: x["Final"] - x["Initial"])
+        model = TableModel(df)
+        # df.loc[len(df)] = df.loc[1] - df.loc[0]  # adding a row
+
+        self.tableBottles.setModel(model)
 
         layoutTables.addWidget(self.tabs, stretch=3)
         layoutTables.addWidget(self.tableViewReports)
 #        layoutMain.addLayout(layoutTools)
         layoutMain.addLayout(layoutTables)
 
-        toolbar = QToolBar("My main toolbar")
+        toolbar = QToolBar("Main toolbar")
         toolbar.setIconSize(QSize(16, 16))
         self.addToolBar(toolbar)
 
@@ -182,12 +278,31 @@ class MainWindow(QMainWindow):
             "Your button",
             self,
         )
-        button_action.setStatusTip("This is your button")
-        button_action.triggered.connect(self.onMyToolBarButtonClick)
+        button_action.setStatusTip("Insert new Shot")
+        button_action.triggered.connect(self.onInsertShotButtonClick)
         button_action.setCheckable(True)
-        toolbar.addAction(button_action)
+        toolbar.addWidget(combo)
         toolbar.addWidget(shotSpin)
         toolbar.addWidget(refreshButt)
+        toolbar.addAction(button_action)
+        bot_start = QAction(
+            QIcon(os.path.join(basedir, "icons/battery-full.png")),
+            "Bottles Start",
+            self,
+        )
+        bot_start.setStatusTip("Save Start Bottle Pressures")
+        bot_start.setCheckable(True)
+        bot_start.triggered.connect(self.onBottStartClick)
+        toolbar.addAction(bot_start)
+        bot_end = QAction(
+            QIcon(os.path.join(basedir, "icons/battery-low.png")),
+            "Bottles End",
+            self,
+        )
+        bot_end.setStatusTip("Save End Bottle Pressures")
+        bot_end.setCheckable(True)
+        bot_end.triggered.connect(self.onBottEndClick)
+        toolbar.addAction(bot_end)
 
         self.setStatusBar(QStatusBar(self))
 
@@ -195,8 +310,36 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
 
-    def onMyToolBarButtonClick(self, s):
-        print("click", s)
+    # def combo_changed(self, i):
+    #    print(i)
+
+    def combo_changed(self, ser): # s is a str
+        print(ser)
+        # shotId, shotNo = self.eDb.GetLastShot(series=ser)
+        # print(f"Id {shotId}, {shotNo}")
+        result = self.eDb.GetLastShot(series=ser)
+        if result is not None:
+            print(result)
+            self.series = ser
+
+    def onInsertShotButtonClick(self, s):
+        # print("click", s)
+        dlg = NewShotDialog(self)
+        if dlg.exec():
+            print("dlg Insert")
+            result = self.eDb.InsertShot('S', self.lastShotNo + 1, 3, 1)
+            if result is not None:
+                print(result)
+                self.lastShotId = result[0]
+                self.lastShotNo = result[1]
+            else:
+                print("Error Insert")
+
+    def onBottStartClick(self, s):
+        self.eDb.SaveBottlePressures(self.lastShotId, 'CC_Start')
+
+    def onBottEndClick(self, s):
+        self.eDb.SaveBottlePressures(self.lastShotId, 'CC_End')
 
     def setTableCell(self, qR, table, name, lin, col):
         val = qR.value(name)
