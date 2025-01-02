@@ -110,9 +110,11 @@ class TableModel(QtCore.QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.ItemDataRole.DisplayRole:
             value = self._data.iloc[index.row(), index.column()]
+            # print(type(value))
+            # <class 'tuple'>
             if isinstance(value, float):
                 # Render float to 2 dp
-                return "%.2f" % ValueError
+                return "%.2f" % value
             # Default (anything not captured above: e.g. int)
             return str(value)
 
@@ -175,14 +177,19 @@ class MainWindow(QMainWindow):
         combo.setCurrentIndex(1)
         self.series = 'S'
         # combo.currentIndexChanged.connect(self.combo_changed)
-        combo.currentTextChanged.connect(self.combo_changed)
+        combo.currentTextChanged.connect(self.seriesChanged)
         # shotId, shotNo = self.eDb.GetLastShot()
         result = self.eDb.GetLastShot()
         if result is not None:
             print(result)
             self.lastShotId = result[0]
             self.lastShotNo = result[1]
-        self.tableReports = QTableView()
+        else:
+            self.lastShotId = 300
+            self.lastShotNo = 100
+        self.shotId = self.lastShotId
+        self.shotNo = self.lastShotNo
+        #self.tableReports = QTableView()
         container = QWidget()
         layoutMain = QHBoxLayout()
         # layoutTools = QVBoxLayout()
@@ -193,7 +200,7 @@ class MainWindow(QMainWindow):
         # model = QSqlTableModel(db=db)
         model = QSqlRelationalTableModel(db=db)
         model.setTable('reports')
-        model.setFilter("shot > 100")
+        # model.setFilter("shot > 100")
         model.setRelation(3, QSqlRelation("operator", "id", "name"))
         model.setRelation(4, QSqlRelation("operator", "id", "name"))
         model.select()
@@ -220,7 +227,7 @@ class MainWindow(QMainWindow):
 # widget.setSuffix("c")
         shotSpin.setSingleStep(1)  # Or e.g. 0.5 for QDoubleSpinBox
         shotSpin.setValue(self.lastShotNo)
-        # shotSpin.valueChanged.connect(self.shot_changed)
+        shotSpin.valueChanged.connect(self.shotChanged)
         # layoutTools.addWidget(shotSpin)
 
         # tableModelReports = QSqlTableModel(db=db)
@@ -248,22 +255,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(personal_page, 'Summary')
         self.tableBottles = QTableView()
         self.tabs.addTab(self.tableBottles, 'Bottle Pressures')
-        result = self.eDb.GetBottlePressures(self.lastShotId)
-        # print(result['data'])
-        df = pd.DataFrame(
-                # You need to transpose your numpy array:
-                # result['data'].T,
-                result['data'],
-                columns=result['columns'],
-                index=["Initial", "Final",],
-        )
-        #df.index = ["Initial", "Final"]
-        # df.loc['Difference'] = df.apply(lambda x: x["Final"] - x["Initial"])
-        model = TableModel(df)
-        # df.loc[len(df)] = df.loc[1] - df.loc[0]  # adding a row
-
-        self.tableBottles.setModel(model)
-
         layoutTables.addWidget(self.tabs, stretch=3)
         layoutTables.addWidget(self.tableViewReports)
 #        layoutMain.addLayout(layoutTools)
@@ -273,18 +264,20 @@ class MainWindow(QMainWindow):
         toolbar.setIconSize(QSize(16, 16))
         self.addToolBar(toolbar)
 
+        toolbar.addSeparator()
         button_action = QAction(
             QIcon(os.path.join(basedir, "icons/rocket--plus.png")),
-            "Your button",
+            "Insert",
             self,
         )
-        button_action.setStatusTip("Insert new Shot")
+        button_action.setStatusTip("Insert new Shot Report")
         button_action.triggered.connect(self.onInsertShotButtonClick)
         button_action.setCheckable(True)
         toolbar.addWidget(combo)
         toolbar.addWidget(shotSpin)
         toolbar.addWidget(refreshButt)
         toolbar.addAction(button_action)
+        toolbar.addSeparator()
         bot_start = QAction(
             QIcon(os.path.join(basedir, "icons/battery-full.png")),
             "Bottles Start",
@@ -309,11 +302,30 @@ class MainWindow(QMainWindow):
         container.setLayout(layoutMain)
         self.setMinimumSize(QSize(1200, 700))
         self.setCentralWidget(container)
+        self.updateTables()
 
     # def combo_changed(self, i):
     #    print(i)
 
-    def combo_changed(self, ser): # s is a str
+    def updateTables(self):
+        _model = self.tableViewReports.model()
+        _model.setQuery(_model.query())
+        result = self.eDb.GetBottlePressures(self.shotId)
+        print(result['data'])
+        df = pd.DataFrame(
+                # You need to transpose your numpy array:
+                # result['data'].T,
+                result['data'],
+                columns=result['columns'],
+                index=["Initial", "Final",],
+        )
+        # df.index = ["Initial", "Final"]
+        # df.loc['Difference'] = df.apply(lambda x: x["Final"] - x["Initial"])
+        model = TableModel(df)
+        # df.loc[len(df)] = df.loc[1] - df.loc[0]  # adding a row
+        self.tableBottles.setModel(model)
+
+    def seriesChanged(self, ser): # s is a str
         print(ser)
         # shotId, shotNo = self.eDb.GetLastShot(series=ser)
         # print(f"Id {shotId}, {shotNo}")
@@ -330,16 +342,29 @@ class MainWindow(QMainWindow):
             result = self.eDb.InsertShot('S', self.lastShotNo + 1, 3, 1)
             if result is not None:
                 print(result)
-                self.lastShotId = result[0]
-                self.lastShotNo = result[1]
+                self.shotId = result[0]
+                self.shotNo = result[1]
             else:
                 print("Error Insert")
 
     def onBottStartClick(self, s):
-        self.eDb.SaveBottlePressures(self.lastShotId, 'CC_Start')
+        self.eDb.SaveBottlePressures(self.shotId, 'CC_Start')
+        self.updateTables()
 
     def onBottEndClick(self, s):
-        self.eDb.SaveBottlePressures(self.lastShotId, 'CC_End')
+        self.eDb.SaveBottlePressures(self.shotId, 'CC_End')
+        self.updateTables()
+
+    def shotChanged(self, i):
+        result = self.eDb.GetShotId(i, self.series)
+        print('shot is ' + str(i) + ' ' + str(result))
+
+        if result is not None:
+            self.shotNo = i
+            self.shotId = result[0]
+        # self.update_queryReports()
+            self.updateTables()
+        # self.update_Report()
 
     def setTableCell(self, qR, table, name, lin, col):
         val = qR.value(name)
@@ -362,13 +387,8 @@ class MainWindow(QMainWindow):
         item = QTableWidgetItem(f'{val:0.2f}')
         table.setItem(lin, col, item)
 
-    def shot_changed(self, i):
-        print('shot is ' + str(i))
-        self.shotNo = i
-        self.update_queryReports()
-        self.update_Report()
 
-    def updateTables(self, shotNo):
+    def updateTables2(self, shotNo):
         queryTables = QSqlQuery(db=db)
         queryTables.prepare(
             "SELECT *, esther_managers.manager_name "
