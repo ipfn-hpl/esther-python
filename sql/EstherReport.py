@@ -102,7 +102,7 @@ class NewShotDialog(QDialog):
         self.setLayout(self.layout)
 
 
-class TableModel(QtCore.QAbstractTableModel):
+class PandasModel(QtCore.QAbstractTableModel):
     def __init__(self, data):
         super().__init__()
         self._data = data
@@ -146,6 +146,7 @@ class TableModel(QtCore.QAbstractTableModel):
         return self._data.shape[1]
 """
 
+
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
@@ -187,9 +188,9 @@ class MainWindow(QMainWindow):
         else:
             self.lastShotId = 300
             self.lastShotNo = 100
-        self.shotId = self.lastShotId
-        self.shotNo = self.lastShotNo
-        #self.tableReports = QTableView()
+        self.shotId = 207  # self.lastShotId
+        self.shotNo = 7  # self.lastShotNo
+        # self.tableReports = QTableView()
         container = QWidget()
         layoutMain = QHBoxLayout()
         # layoutTools = QVBoxLayout()
@@ -220,13 +221,13 @@ class MainWindow(QMainWindow):
 #        self.list.setPlaceholderText("1")
 #        self.list.textChanged.connect(self.update_query)
         shotSpin = QSpinBox()
-        shotSpin.setMinimum(10)
+        shotSpin.setMinimum(0)
         shotSpin.setMaximum(1000)  # May need to change (hopefully)
 # Or: widget.setRange(-10,3)
 # widget.setPrefix("$")
 # widget.setSuffix("c")
         shotSpin.setSingleStep(1)  # Or e.g. 0.5 for QDoubleSpinBox
-        shotSpin.setValue(self.lastShotNo)
+        shotSpin.setValue(self.shotNo)
         shotSpin.valueChanged.connect(self.shotChanged)
         # layoutTools.addWidget(shotSpin)
 
@@ -255,6 +256,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(personal_page, 'Summary')
         self.tableBottles = QTableView()
         self.tabs.addTab(self.tableBottles, 'Bottle Pressures')
+        self.tablePulseData = QTableView()
+        self.tabs.addTab(self.tablePulseData, 'Pulse Data')
         layoutTables.addWidget(self.tabs, stretch=3)
         layoutTables.addWidget(self.tableViewReports)
 #        layoutMain.addLayout(layoutTools)
@@ -310,20 +313,25 @@ class MainWindow(QMainWindow):
     def updateTables(self):
         _model = self.tableViewReports.model()
         _model.setQuery(_model.query())
-        result = self.eDb.GetBottlePressures(self.shotId)
-        print(result['data'])
+        df = self.eDb.GetBottlePressures(self.shotId)
+        """
+        # print(result['data'])
         df = pd.DataFrame(
                 # You need to transpose your numpy array:
                 # result['data'].T,
                 result['data'],
                 columns=result['columns'],
-                index=["Initial", "Final",],
         )
-        # df.index = ["Initial", "Final"]
-        # df.loc['Difference'] = df.apply(lambda x: x["Final"] - x["Initial"])
-        model = TableModel(df)
-        # df.loc[len(df)] = df.loc[1] - df.loc[0]  # adding a row
+        ddiff = df.diff()
+        df = pd.concat([df, ddiff.iloc[[1]]], ignore_index=True)
+        df.index = ["Initial", "Final", "Difference"]
+        """
+        model = PandasModel(df)
         self.tableBottles.setModel(model)
+        df = self.eDb.GetPulseData(self.shotId)
+        model = PandasModel(df)
+        self.tablePulseData.setModel(model)
+        # breakpoint()
 
     def seriesChanged(self, ser): # s is a str
         print(ser)
@@ -352,7 +360,7 @@ class MainWindow(QMainWindow):
         self.updateTables()
 
     def onBottEndClick(self, s):
-        self.eDb.SaveBottlePressures(self.shotId, 'CC_End')
+        self.eDb.SaveBottlePressures(self.shotId, 'End')
         self.updateTables()
 
     def shotChanged(self, i):
