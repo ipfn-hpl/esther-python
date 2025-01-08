@@ -114,7 +114,7 @@ class PandasModel(QtCore.QAbstractTableModel):
             # <class 'tuple'>
             if isinstance(value, float):
                 # Render float to 2 dp
-                return "%.2f" % value
+                return "%.3f" % value
             # Default (anything not captured above: e.g. int)
             return str(value)
 
@@ -163,9 +163,9 @@ class SignDialog(QDialog):
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
 
-        self.layout = QVBoxLayout()
-        self.layout.addWidget(self.buttonBox)
-        self.setLayout(self.layout)
+        layout = QVBoxLayout()
+        layout.addWidget(self.buttonBox)
+        self.setLayout(layout)
 
 
 class MainWindow(QMainWindow):
@@ -258,6 +258,23 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tableBottles, 'Bottle Pressures')
         self.tablePulseData = QTableView()
         self.tabs.addTab(self.tablePulseData, 'Pulse Data')
+        layout = QVBoxLayout()
+        model = QSqlTableModel(db=db)
+        model.setTable('reports')
+        self.tableCalc = QTableView()
+        self.tableCalc.setModel(model)
+        model.setFilter("id = 207")
+        model.select()
+        # removeColumns(int column, int count,
+        model.removeColumns(0, 1)
+        model.removeColumns(2, 2)
+        model.setHeaderData(0, Qt.Orientation.Horizontal, 'Series')
+        calc_page = QWidget()
+        calc_page.setLayout(layout)
+        layout.addWidget(self.tableCalc)
+        layout.addWidget(QLabel('Amb. Temp'))
+        self.tabs.addTab(calc_page, 'Pulse Parameters')
+
         layoutTables.addWidget(self.tabs, stretch=3)
         layoutTables.addWidget(self.tableViewReports)
 #        layoutMain.addLayout(layoutTools)
@@ -313,6 +330,12 @@ class MainWindow(QMainWindow):
     def updateTables(self):
         _model = self.tableViewReports.model()
         _model.setQuery(_model.query())
+
+        _model = self.tableCalc.model()
+        _model.setFilter(f"id = {self.shotId:d}")
+        # _model.select()
+        # _model.setQuery(_model.query())
+        # breakpoint()
         df = self.eDb.GetBottlePressures(self.shotId)
         """
         # print(result['data'])
@@ -352,6 +375,7 @@ class MainWindow(QMainWindow):
                 print(result)
                 self.shotId = result[0]
                 self.shotNo = result[1]
+                self.updateTables()
             else:
                 print("Error Insert")
 
@@ -365,14 +389,12 @@ class MainWindow(QMainWindow):
 
     def shotChanged(self, i):
         result = self.eDb.GetShotId(i, self.series)
-        print('shot is ' + str(i) + ' ' + str(result))
 
         if result is not None:
+            print('shot is ' + str(i) + ' ' + str(result))
             self.shotNo = i
-            self.shotId = result[0]
-        # self.update_queryReports()
+            self.shotId = result
             self.updateTables()
-        # self.update_Report()
 
     def setTableCell(self, qR, table, name, lin, col):
         val = qR.value(name)
@@ -396,6 +418,41 @@ class MainWindow(QMainWindow):
         table.setItem(lin, col, item)
 
 
+
+    def update_queryReports(self, s=None):
+        # print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
+        # print(s)
+        queryReports = QSqlQuery(db=db)
+        queryReports.prepare(
+            "SELECT shot_number, esther_reports.manager_id, "
+            "esther_managers.manager_name, start_time, end_time "
+            "FROM esther_reports "
+            "INNER JOIN esther_managers ON esther_reports.manager_id = esther_managers.manager_id "
+            #"WHERE =shot_number :list_id AND DayPlan = :plan_id "
+            "WHERE shot_number  > 160 "
+            #"WHERE shot_number  = :shot_no "
+            #"ORDER BY LineOrder ASC"
+        )
+        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
+        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
+
+        queryReports.bindValue(":shot_no", self.shotNo)
+        queryReports.exec()
+        #print(queryReports.lastQuery()) #  + "; Line Before: " + str(lineBefore))
+        model = QSqlQueryModel()
+        model.setQuery(queryReports)
+        self.tableReports.setModel(model)
+        self.tableReports.setColumnWidth(0,60)
+
+
+app = QApplication(sys.argv)
+window = MainWindow()
+window.show()
+# sys.exit(app.exec())
+app.exec()
+
+# vim: syntax=python ts=4 sw=4 sts=4 sr et
+"""
     def updateTables2(self, shotNo):
         queryTables = QSqlQuery(db=db)
         queryTables.prepare(
@@ -506,41 +563,7 @@ class MainWindow(QMainWindow):
             print('No Report')
         # print(queryReport.lastQuery() + str(val))
 
-    def update_Report(self, s=None):
-        self.updateTables(self.shotNo)
-        """
-        """
+#    def update_Report(self, s=None):
+#        self.updateTables(self.shotNo)
 
-    def update_queryReports(self, s=None):
-        # print(Qt.CheckState(self.ceChck) == Qt.CheckState.Checked)
-        # print(s)
-        queryReports = QSqlQuery(db=db)
-        queryReports.prepare(
-            "SELECT shot_number, esther_reports.manager_id, "
-            "esther_managers.manager_name, start_time, end_time "
-            "FROM esther_reports "
-            "INNER JOIN esther_managers ON esther_reports.manager_id = esther_managers.manager_id "
-            #"WHERE =shot_number :list_id AND DayPlan = :plan_id "
-            "WHERE shot_number  > 160 "
-            #"WHERE shot_number  = :shot_no "
-            #"ORDER BY LineOrder ASC"
-        )
-        #query = QSqlQuery("SELECT * FROM 'ChecklistLines' ORDER BY 'ChecklistLines'.'LineOrder' ASC", db=db)
-        #query = QSqlQuery("SELECT * FROM ChecklistLines", db=db)
-
-        queryReports.bindValue(":shot_no", self.shotNo)
-        queryReports.exec()
-        #print(queryReports.lastQuery()) #  + "; Line Before: " + str(lineBefore))
-        model = QSqlQueryModel()
-        model.setQuery(queryReports)
-        self.tableReports.setModel(model)
-        self.tableReports.setColumnWidth(0,60)
-
-
-app = QApplication(sys.argv)
-window = MainWindow()
-window.show()
-# sys.exit(app.exec())
-app.exec()
-
-# vim: syntax=python ts=4 sw=4 sts=4 sr et
+"""

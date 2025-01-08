@@ -19,6 +19,8 @@ import pandas as pd
 # Local module with DB configuration
 import config
 
+from getMeteoLisbon import readMeteo
+
 BOTTLES_CHANNELS = [
     {'name': 'PT101', 'pv': 'Esther:gas:PT101'},
     {'name': 'PT201', 'pv': 'Esther:gas:PT201'},
@@ -207,7 +209,10 @@ class EstherDB():
             "WHERE shot = %s "
             "AND esther_series_name = %s")
         c.execute(query, (shot, series))
-        return c.fetchone()
+        fo = c.fetchone()
+        if fo is not None:
+            return fo[0]
+        # return c.fetchone()
 
     def GetLastShot(self, series='S'):
         c = self.db.cursor()
@@ -216,7 +221,8 @@ class EstherDB():
             "WHERE esther_series_name = %s "
             "ORDER BY id DESC LIMIT 1")
         c.execute(query, series)
-        return c.fetchone()
+        fo = c.fetchone()
+        return fo
 
     def InsertShot(self, series, shot, ce, re):
         c = self.db.cursor()
@@ -226,15 +232,35 @@ class EstherDB():
             "VALUES (NULL, %s, %s, %s, %s)")
         try:
             c.execute(query, (series, shot, ce, re,))
-            # MySQLdb._exceptions.IntegrityError
         except MySQLdb._exceptions.IntegrityError:
             print('1062, Duplicate entry ')
             #  print("1062, Duplicate entry 'S-101' for key 'esther_series_name'")
             # print(query)
             raise ValueError
 
+        new_id, shot = self.GetLastShot()
+        meteoLisbon = readMeteo()
+        # breakpoint()
+        if meteoLisbon is not None:
+            query = ("INSERT INTO sample "
+                     "(time_date, reports_id, short_name, pulse_phase, float_val) "
+                     "VALUES (%s, %s, %s, %s, %s)")
+            try:
+                c.executemany(query, [
+                    (meteoLisbon[0], new_id, 'ambientTemperature',
+                     'CC_Start', meteoLisbon[1]),
+                    (meteoLisbon[0], new_id, 'ambientPressure',
+                     'CC_Start', meteoLisbon[2]),
+                    (meteoLisbon[0], new_id, 'ambientHumidity',
+                     'CC_Start', meteoLisbon[3]),
+                    ])
+                # MySQLdb._exceptions.IntegrityError
+            except MySQLdb._exceptions.IntegrityError:
+                print('1062, Duplicate entry ')
+
         self.db.commit()
-        return self.GetLastShot(series)
+        # return self.GetLastShot(series)
+        return new_id, shot
         # return Id, shot
 
     def GetPulseData(self, shot_id):
@@ -249,27 +275,47 @@ class EstherDB():
                      "AND short_name = %s "
                      "AND pulse_phase = %s")
             c.execute(query, (shot_id, p['channel'], p['phase'],))
-            fv = c.fetchone()
-            if fv is None:
+            fo = c.fetchone()
+            if fo is None:
                 data.append(None)
                 cols.append(None)
                 print(c._last_executed)
             else:
-                data.append(fv[0])
+                data.append(fo[0])
                 cols.append(p['name'])
                 #  ddict[p['name']] = fv[0]
 
-        cols.append('Measured P')  # 9
-        data.append(data[1]/1000.0 - data[2] + data[6])
-        cols.append('Final P')
-        data.append(data[9] + data[7])  # 10
+        if len(cols) == 9:
+            try:
+                data.append(data[1]/1000.0 - data[2] + data[6])
+                cols.append('Measured P')  # 9
+                data.append(data[9] + data[7])  # 10
+                cols.append('Final P')
+            # except TypeError:
+            #    print(f'Len data : {len(data)}')
 
-        # Tot_Gas = data[6] - data[2] 
-        Mf_O2 = (data[3] - data[2]) / data[9]
-        Mf_H2 = (data[5] - data[4]) / data[9]
-        print(f"Mf_O2: {Mf_O2}, Mf_H2 {Mf_H2}")
+            # Tot_Gas = data[6] - data[2]
+            # Molar Fraction
+                Mf_O2 = (data[3] - data[2]) / data[9]
+                Mf_H2 = (data[5] - data[4]) / data[9]
+                Mf_He = 1.0 - Mf_O2 - Mf_H2
+                # Stoichiometric Ratios
+                Sr_H2 = 2.0  # Definition
+                Sr_O2 = Mf_O2 * Sr_H2 / Mf_H2
+                Sr_He = Mf_He * Sr_H2 / Mf_He
+                print(f"Mf_O2: {Mf_O2}, Mf_H2 {Mf_H2}, Mf_He {Mf_He}")
+                cols.append('Ratio O2')
+                data.append(Sr_O2)
+                cols.append('Ratio H2')
+                data.append(Sr_H2)
+                cols.append('Ratio He')
+                data.append(Sr_He)  # 10
+                print(f"Sr_O2: {Sr_O2:.2f}, Sr_He {Sr_He:.2f}")
+            except TypeError:
+                print("unsupported operand type(s) for /: 'NoneType' and 'float'")
+                # breakpoint()
+
         # print(c._last_executed)
-        # breakpoint()
         df = pd.DataFrame(
                 [data],
                 columns=cols,
@@ -292,10 +338,10 @@ class EstherDB():
             while True:
                 fv = c.fetchone()
                 if fv is None:
+                    # make an empty DataFrame
+                    #cols.append(None)
+                    #bvals.append(None)
                     break
-                # bvals.append(None)
-                # else:
-                # cols.append(b['name'])
                 cols.append(fv[0])
                 bvals.append(fv[1])
             # print(c._last_executed)
@@ -354,10 +400,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if (args.newReport):
         Id, shot = dB.InsertShot('S', args.shot + 1, 3, 1)
-        print(f"Inserted {Id}, {shot}")
-        dB.SaveBottlePressures(Id, 'CC_Start')
-        dB.SaveBottlePressures(Id, 'End')
-        # insert_report(db, 'S', 101, 3, 1)
+        print(f"Inserted {Id}")
+        # dB.SaveBottlePressures(Id, 'CC_Start')
+        # dB.SaveBottlePressures(Id, 'End')
         exit()
     if (args.test):
         # result = dB.GetLastShot(series='E')
