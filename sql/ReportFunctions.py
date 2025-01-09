@@ -58,6 +58,10 @@ class EstherDB():
             user=config.username,
             password=config.password,
             database=config.database)
+        self.cursor = self.db.cursor()
+        self.lastShotId = 300
+        self.lastShotNo = 100
+        self.GetLastShot()
 
     def ImportOldShot(self, shot, series='S'):
         dbOld = MySQLdb.connect(
@@ -203,7 +207,8 @@ class EstherDB():
         return co.fetchone()
 
     def GetShotId(self, shot, series='S'):
-        c = self.db.cursor()
+        c = self.cursor
+        # c = self.db.cursor()
         query = (
             "SELECT id FROM reports "
             "WHERE shot = %s "
@@ -215,17 +220,22 @@ class EstherDB():
         # return c.fetchone()
 
     def GetLastShot(self, series='S'):
-        c = self.db.cursor()
+        c = self.cursor
         query = (
             "SELECT id, shot FROM reports "
             "WHERE esther_series_name = %s "
             "ORDER BY id DESC LIMIT 1")
         c.execute(query, series)
         fo = c.fetchone()
+        if fo is not None:
+            # print(result)
+            self.lastShotId = fo[0]
+            self.lastShotNo = fo[1]
         return fo
 
     def InsertShot(self, series, shot, ce, re):
-        c = self.db.cursor()
+        # c = self.db.cursor()
+        c = self.cursor
         query = (
             "INSERT INTO reports "
             "(id, esther_series_name, shot, chief_engineer_id, researcher_id) "
@@ -238,13 +248,15 @@ class EstherDB():
             # print(query)
             raise ValueError
 
-        new_id, shot = self.GetLastShot()
+        # new_id, shot = 
+        self.GetLastShot()
+        new_id = self.lastShotId
         meteoLisbon = readMeteo()
         # breakpoint()
+        query = ("INSERT INTO sample "
+                 "(time_date, reports_id, short_name, pulse_phase, float_val) "
+                 "VALUES (%s, %s, %s, %s, %s)")
         if meteoLisbon is not None:
-            query = ("INSERT INTO sample "
-                     "(time_date, reports_id, short_name, pulse_phase, float_val) "
-                     "VALUES (%s, %s, %s, %s, %s)")
             try:
                 c.executemany(query, [
                     (meteoLisbon[0], new_id, 'ambientTemperature',
@@ -260,11 +272,11 @@ class EstherDB():
 
         self.db.commit()
         # return self.GetLastShot(series)
-        return new_id, shot
-        # return Id, shot
+        return new_id, self.lastShotNo
 
     def GetPulseData(self, shot_id):
-        c = self.db.cursor()
+        # c = self.db.cursor()
+        c = self.cursor
         data = []
         cols = []
 
@@ -279,7 +291,9 @@ class EstherDB():
             if fo is None:
                 data.append(None)
                 cols.append(None)
+                print("No data: ", end='')
                 print(c._last_executed)
+                return None
             else:
                 data.append(fo[0])
                 cols.append(p['name'])
@@ -323,10 +337,57 @@ class EstherDB():
         df.index = [f"Pulse Id {shot_id}", ]
         return df
 
+    def _gBottlePressures(self, shot_id, phase):
+        c = self.cursor
+        query = ("SELECT short_name, float_val FROM sample "
+                 "WHERE reports_id = %s "
+                 "AND short_name REGEXP 'PT[1-8]01' "
+                 "AND pulse_phase = %s")
+        c.execute(query, (shot_id, phase,))
+        fvs = c.fetchmany(16)
+        # print(f"len {len(fvs)}")
+        if len(fvs) == 6:
+            return fvs
+        return None
+
     def GetBottlePressures(self, shot_id):
-        c = self.db.cursor()
-        pvals = []
-        PHS = ['CC_Start', 'End']
+        # c = self.cursor
+        # c = self.db.cursor()
+        data = []
+        # PHS = ['CC_Start', 'End']
+        fvals = self._gBottlePressures(shot_id, 'CC_Start')
+        if fvals is None:
+            return None
+
+        bvals = []
+        cols = []
+        for r in fvals:
+            cols.append(r[0])
+            bvals.append(r[1])
+        data.append(bvals)
+        fvals = self._gBottlePressures(shot_id, 'End')
+        if fvals is None:
+            # Only Initial Values
+            df = pd.DataFrame(
+                    data,
+                    columns=cols,
+            )
+            df.index = ["Initial",]
+            return df
+
+        bvals = []
+        for r in fvals:
+            bvals.append(r[1])
+        data.append(bvals)
+        df = pd.DataFrame(
+                data,
+                columns=cols,
+        )
+        ddiff = df.diff()
+        df = pd.concat([df, ddiff.iloc[[1]]], ignore_index=True)
+        df.index = ["Initial", "Final", "Difference"]
+        return df
+        """
         for ph in PHS:
             bvals = []
             cols = []
@@ -335,6 +396,8 @@ class EstherDB():
                      "AND short_name REGEXP 'PT[1-8]01' "
                      "AND pulse_phase = %s")
             c.execute(query, (shot_id, ph,))
+            fvs = c.fetchmany(10)
+            print(f"len {len(fvs)}")
             while True:
                 fv = c.fetchone()
                 if fv is None:
@@ -361,10 +424,12 @@ class EstherDB():
         # bData = {'columns': cols, 'data': np.array(pvals)}
         # bData = {'columns': cols, 'data': pvals}
         # return bData  # np.array(pvals)
+        """
 
     def SaveBottlePressures(self, shot_id, phase):
         from epics import caget  # , caput  # , cainfo
-        c = self.db.cursor()
+        # c = self.db.cursor()
+        c = self.cursor
         for b in BOTTLES_CHANNELS:
             pval = caget(b['pv'])
             query = ("INSERT INTO sample "
@@ -394,8 +459,8 @@ if __name__ == '__main__':
 
     dB = EstherDB()
     # Id, shot = dB.GetLastShot()
-    result = dB.GetLastShot(series='S')
-    print(result)
+    # result = dB.GetLastShot(series='S')
+    # print(result)
     # print(f"Id {Id}, {shot}")
     args = parser.parse_args()
     if (args.newReport):
@@ -406,7 +471,11 @@ if __name__ == '__main__':
         exit()
     if (args.test):
         # result = dB.GetLastShot(series='E')
-        result = dB.GetPulseData(207)
+        # result = dB.GetPulseData(207)
+        result = dB._gBottlePressures(args.shot, 'CC_Start')
+        if result is not None:
+            print(result)
+        result = dB.GetBottlePressures(args.shot)
         if result is not None:
             print(result)
         # bottle_pressures(db, 303, 'CC_Start')

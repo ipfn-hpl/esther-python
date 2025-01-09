@@ -102,6 +102,28 @@ class NewShotDialog(QDialog):
         self.setLayout(self.layout)
 
 
+class TableModel(QtCore.QAbstractTableModel): 
+    def __init__(self, data):
+        super().__init__()
+        self._data = data
+
+    def data(self, index, role):
+        if role == Qt.ItemDataRole.DisplayRole:
+            # See below for the nested-list data structure.
+            # .row() indexes into the outer list,
+            # .column() indexes into the sub-list
+            return self._data[index.row()][index.column()]
+
+    def rowCount(self, index):
+        # The length of the outer list.
+        return len(self._data)
+
+    def columnCount(self, index):
+        # The following takes the first sub-list, and returns
+        # the length (only works if all rows are an equal length)
+        return len(self._data[0])
+
+
 class PandasModel(QtCore.QAbstractTableModel):
     def __init__(self, data):
         super().__init__()
@@ -180,6 +202,7 @@ class MainWindow(QMainWindow):
         # combo.currentIndexChanged.connect(self.combo_changed)
         combo.currentTextChanged.connect(self.seriesChanged)
         # shotId, shotNo = self.eDb.GetLastShot()
+        """
         result = self.eDb.GetLastShot()
         if result is not None:
             print(result)
@@ -188,6 +211,9 @@ class MainWindow(QMainWindow):
         else:
             self.lastShotId = 300
             self.lastShotNo = 100
+        """
+        self.shotId = self.eDb.lastShotId
+        self.shotNo = self.eDb.lastShotNo
         self.shotId = 207  # self.lastShotId
         self.shotNo = 7  # self.lastShotNo
         # self.tableReports = QTableView()
@@ -327,6 +353,19 @@ class MainWindow(QMainWindow):
     # def combo_changed(self, i):
     #    print(i)
 
+    def clearTables(self):
+        # self.tableBottles.model.resetInternalData()
+        data = [
+            [0, 0, 0, 0, 0],
+            [9, 1, 5, 3, 8],
+            [2, 1, 5, 3, 9], ]
+
+        model = TableModel(data)
+        self.tableBottles.setModel(model)
+        # self.tableBottles.reset()
+        # self.tablePulseData.setModel(model)
+        self.tablePulseData.reset()
+
     def updateTables(self):
         _model = self.tableViewReports.model()
         _model.setQuery(_model.query())
@@ -337,23 +376,24 @@ class MainWindow(QMainWindow):
         # _model.setQuery(_model.query())
         # breakpoint()
         df = self.eDb.GetBottlePressures(self.shotId)
-        """
-        # print(result['data'])
-        df = pd.DataFrame(
-                # You need to transpose your numpy array:
-                # result['data'].T,
-                result['data'],
-                columns=result['columns'],
-        )
-        ddiff = df.diff()
-        df = pd.concat([df, ddiff.iloc[[1]]], ignore_index=True)
-        df.index = ["Initial", "Final", "Difference"]
-        """
-        model = PandasModel(df)
-        self.tableBottles.setModel(model)
+        if df is None:
+            # model = PandasModel(df)
+            _model = self.tableBottles.model()
+            _model.resetInternalData()
+            self.tableBottles.reset()
+        else:
+            model = PandasModel(df)
+            self.tableBottles.setModel(model)
+
         df = self.eDb.GetPulseData(self.shotId)
-        model = PandasModel(df)
-        self.tablePulseData.setModel(model)
+        if df is None:
+            # self.tablePulseData.model.resetInternalData()
+            # self.tablePulseData.reset()
+            model = QtCore.QAbstractTableModel()
+            self.tablePulseData.setModel(model)
+        else:
+            model = PandasModel(df)
+            self.tablePulseData.setModel(model)
         # breakpoint()
 
     def seriesChanged(self, ser): # s is a str
@@ -390,7 +430,10 @@ class MainWindow(QMainWindow):
     def shotChanged(self, i):
         result = self.eDb.GetShotId(i, self.series)
 
-        if result is not None:
+        if result is None:
+            print('No shot report at ' + str(i))
+            self.clearTables()
+        else:
             print('shot is ' + str(i) + ' ' + str(result))
             self.shotNo = i
             self.shotId = result
