@@ -45,7 +45,8 @@ from PyQt6.QtWidgets import (
 )
 
 from ReportFunctions import EstherDB
-import pandas as pd
+# import pandas as pd
+from TableModels import SimpleModel, PandasModel
 
 import config as cfg
 # from epics import caget  # , caput  # , cainfo
@@ -102,73 +103,6 @@ class NewShotDialog(QDialog):
         self.setLayout(self.layout)
 
 
-class TableModel(QtCore.QAbstractTableModel): 
-    def __init__(self, data):
-        super().__init__()
-        self._data = data
-
-    def data(self, index, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            # See below for the nested-list data structure.
-            # .row() indexes into the outer list,
-            # .column() indexes into the sub-list
-            return self._data[index.row()][index.column()]
-
-    def rowCount(self, index):
-        # The length of the outer list.
-        return len(self._data)
-
-    def columnCount(self, index):
-        # The following takes the first sub-list, and returns
-        # the length (only works if all rows are an equal length)
-        return len(self._data[0])
-
-
-class PandasModel(QtCore.QAbstractTableModel):
-    def __init__(self, data):
-        super().__init__()
-        self._data = data
-
-    def data(self, index, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            value = self._data.iloc[index.row(), index.column()]
-            # print(type(value))
-            # <class 'tuple'>
-            if isinstance(value, float):
-                # Render float to 2 dp
-                return "%.3f" % value
-            # Default (anything not captured above: e.g. int)
-            return str(value)
-
-    def rowCount(self, index):
-        return self._data.shape[0]
-
-    def columnCount(self, index):
-        return self._data.shape[1]
-
-    def headerData(self, section, orientation, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            if orientation == Qt.Orientation.Horizontal:
-                return str(self._data.columns[section])
-            if orientation == Qt.Orientation.Vertical:
-                return str(self._data.index[section])
-
-
-"""
-    def data(self, index, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            # Note: self._data[index.row()][index.column()] will also work
-            value = self._data[index.row(), index.column()]
-            return str(value)
-
-    def rowCount(self, index):
-        return self._data.shape[0]
-
-    def columnCount(self, index):
-        return self._data.shape[1]
-"""
-
-
 class SignDialog(QDialog):
     def __init__(self, parent=None):  # <1>
         super().__init__(parent)
@@ -214,6 +148,7 @@ class MainWindow(QMainWindow):
         """
         self.shotId = self.eDb.lastShotId
         self.shotNo = self.eDb.lastShotNo
+        self.layoutShotNo = self.eDb.lastShotNo
         self.shotId = 207  # self.lastShotId
         self.shotNo = 7  # self.lastShotNo
         # self.tableReports = QTableView()
@@ -353,15 +288,26 @@ class MainWindow(QMainWindow):
     # def combo_changed(self, i):
     #    print(i)
 
+    def clearTable(self, table, data):
+        model = SimpleModel(data)
+        table.setModel(model)
+
     def clearTables(self):
+        self.clearPulseDataTable()
+        self.clearBottleTable()
+
+    def clearBottleTable(self):
         # self.tableBottles.model.resetInternalData()
         data = [
             [0, 0, 0, 0, 0],
-            [9, 1, 5, 3, 8],
+            [0, 0, 0, 0, 0],
             [2, 1, 5, 3, 9], ]
+        self.clearTable(self.tableBottles, data)
 
-        model = TableModel(data)
-        self.tableBottles.setModel(model)
+    def clearPulseDataTable(self):
+        data = [
+            [0, 0, 0, 0, 0],]
+        self.clearTable(self.tablePulseData, data)
         # self.tableBottles.reset()
         # self.tablePulseData.setModel(model)
         self.tablePulseData.reset()
@@ -377,11 +323,11 @@ class MainWindow(QMainWindow):
         # breakpoint()
         df = self.eDb.GetBottlePressures(self.shotId)
         if df is None:
-            # model = PandasModel(df)
-            _model = self.tableBottles.model()
-            _model.resetInternalData()
-            self.tableBottles.reset()
+            self.clearBottleTable()
+            # _model.resetInternalData()
+            # self.tableBottles.reset()
         else:
+            # self.clearPulseDataTable()
             model = PandasModel(df)
             self.tableBottles.setModel(model)
 
@@ -389,8 +335,9 @@ class MainWindow(QMainWindow):
         if df is None:
             # self.tablePulseData.model.resetInternalData()
             # self.tablePulseData.reset()
-            model = QtCore.QAbstractTableModel()
-            self.tablePulseData.setModel(model)
+            self.clearPulseDataTable()
+            # model = QtCore.QAbstractTableModel()
+            # self.tablePulseData.setModel(model)
         else:
             model = PandasModel(df)
             self.tablePulseData.setModel(model)
@@ -415,6 +362,7 @@ class MainWindow(QMainWindow):
                 print(result)
                 self.shotId = result[0]
                 self.shotNo = result[1]
+                self.lastShotNo = result[1]
                 self.updateTables()
             else:
                 print("Error Insert")
